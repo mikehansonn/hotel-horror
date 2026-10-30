@@ -1,0 +1,8 @@
+# The co-op relay (server.js) on Render's free tier. The game page itself can live on Netlify.
+services:
+  - type: web
+    name: the-last-resort
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start

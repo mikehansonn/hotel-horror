@@ -20,10 +20,12 @@ export class Net {
     return new Promise((resolve, reject) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       let ws;
-      try { ws = new WebSocket(`${proto}://${location.host}`); } catch (e) { reject(e); return; }
-      const timer = setTimeout(() => { ws.close(); reject(new Error('The hotel server did not answer.')); }, 6000);
+      // A static deploy (Netlify) relays through a separately hosted server.js; otherwise it's this server.
+      const url = window.RELAY_URL || `${proto}://${location.host}`;
+      try { ws = new WebSocket(url); } catch (e) { reject(e); return; }
+      const timer = setTimeout(() => { ws.close(); reject(new Error('The hotel server did not answer. If it was asleep, try again in a minute.')); }, window.RELAY_URL ? 60000 : 6000);
       ws.onopen = () => { clearTimeout(timer); this.attach(ws); resolve(ws); };
-      ws.onerror = () => { clearTimeout(timer); reject(new Error('Could not reach the hotel server. Is "npm start" running?')); };
+      ws.onerror = () => { clearTimeout(timer); reject(new Error(window.RELAY_URL ? 'Could not reach the co-op server. Try again in a minute.' : 'Could not reach the hotel server. Is "npm start" running?')); };
     });
   }
 
