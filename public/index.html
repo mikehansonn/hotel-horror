@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Last Resort</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%8E%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800&family=Special+Elite&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud" class="hidden">
+    <div id="grain"></div>
+    <div id="vignette"></div>
+    <div id="pulse"></div>
+    <div id="hud-tl">
+      <div id="shift-name"></div>
+      <div id="clock-row"><div id="clock">3:00 PM</div><div id="phase-label"></div></div>
+      <div id="timeline" class="hidden"><div class="tl-night"></div><div class="tl-food"></div><div id="tl-now"></div><span class="tl-a">3PM</span><span class="tl-b">NOON</span></div>
+      <div id="power">⚡ POWER OUT — reset the breaker</div>
+    </div>
+    <div id="rating" class="hidden">
+      <div class="rating-stars"><div class="starbar big"><span id="rating-fill" class="starfill"></span></div><div id="rating-mark"></div></div>
+      <div id="rating-num">—</div>
+      <div id="rating-target"></div>
+    </div>
+    <div id="hud-tr">
+      <canvas id="minimap" width="230" height="230"></canvas>
+      <div id="stats-row"><div id="money"><span id="money-val">$0</span></div><div id="occupancy"></div></div>
+    </div>
+    <div id="tasks"></div>
+    <div id="feed"></div>
+    <div id="toasts"></div>
+    <div id="pings"></div>
+    <div id="waypoint"><div class="wp-arrow"></div><div class="wp-ic"></div><div class="wp-d"></div></div>
+    <div id="crosshair">
+      <svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="15"/><circle class="ring" cx="20" cy="20" r="15"/></svg>
+      <div class="dot"></div>
+    </div>
+    <div id="prompt"></div>
+    <div id="hud-bl">
+      <div id="held"></div>
+      <div id="stamina"><div id="stamina-fill"></div></div>
+    </div>
+    <div id="chat"><div id="chat-log"></div><input id="chat-input" maxlength="120" placeholder="Say something… (Enter to send, Esc to cancel)" autocomplete="off"></div>
+    <div id="hint"></div>
+    <div id="tip"></div>
+    <div id="titlecard"></div>
+    <div id="downscreen"></div>
+    <div id="closing"></div>
+    <div id="fade"></div>
+    <div id="mapbig"><canvas id="mapbig-canvas" width="928" height="624"></canvas><div class="map-legend">🛎️ desk · 🧳 luggage · 🛏️ dirty room · 🚗 valet · <span style="color:#5fd3e6">■</span> helpers · red hatch = staff only · <b>M</b> close</div></div>
+  </div>
+
+  <div id="desk" class="hidden"></div>
+  <div id="elevator" class="hidden"></div>
+  <div id="screen" class="overlay hidden"></div>
+
+  <div id="menu" class="overlay">
+    <div class="menu-card">
+      <div class="logo">
+        <div class="neon">THE LAST RESORT</div>
+        <div class="tag">a hotel horror for you and your friends</div>
+      </div>
+      <p class="pitch">You run the front desk, the kitchen, the valet stand and the mop bucket at a roadside hotel.
+        Every shift brings a stranger clientele. Keep the guests happy enough to leave good reviews,
+        or corporate shuts you down. Some guests should never be let in.</p>
+      <label class="field">Your name <input id="name" maxlength="16" autocomplete="off"></label>
+      <div class="field col">Difficulty <small>(when hosting · fine-tune any time in the Manager's Office)</small>
+        <div id="preset-pick" class="preset-pick"></div>
+      </div>
+      <label class="field">Shift length
+        <select id="shiftlen">
+          <option value="300">Short (5 min)</option>
+          <option value="480" selected>Standard (8 min)</option>
+          <option value="720">Long (12 min)</option>
+        </select>
+      </label>
+      <div class="row">
+        <button id="btn-solo" class="big">Play solo</button>
+        <button id="btn-host" class="big">Host co-op</button>
+      </div>
+      <div class="row join">
+        <input id="code" maxlength="4" placeholder="CODE" autocomplete="off">
+        <button id="btn-join">Join a friend</button>
+      </div>
+      <div id="menu-error"></div>
+      <details>
+        <summary>How to play</summary>
+        <div id="howto"></div>
+      </details>
+    </div>
+  </div>
+
+  <div id="loading" class="overlay hidden"><div class="neon small">Preparing the rooms…</div></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

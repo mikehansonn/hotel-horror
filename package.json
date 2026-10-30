@@ -1,0 +1,18 @@
+{
+  "name": "the-last-resort",
+  "version": "1.0.0",
+  "description": "A 3D co-op hotel horror game. Check in the guests, keep the rating up, and try not to look in the basement.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/sim-test.js"
+  },
+  "dependencies": {
+    "three": "0.170.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
