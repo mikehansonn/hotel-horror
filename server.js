@@ -35,6 +35,7 @@ function resolve(urlPath) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url.split('?')[0] === '/mode.js') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-cache' }); res.end('window.SOLO_ONLY = false;'); return; }
   const file = resolve(req.url);
   if (!file) { res.writeHead(403); res.end(); return; }
   fs.stat(file, (err, st) => {

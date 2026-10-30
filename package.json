@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/sim-test.js"
+    "test": "node test/sim-test.js",
+    "build:static": "node scripts/build-static.js"
   },
   "dependencies": {
     "three": "0.170.0",

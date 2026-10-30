@@ -283,6 +283,11 @@ $('btn-solo').onclick = () => start('solo');
 $('btn-host').onclick = () => start('host');
 $('btn-join').onclick = () => start('join');
 $('code').addEventListener('keydown', e => { if (e.key === 'Enter') start('join'); });
+// On a static host (no server.js) there's nobody to relay co-op, so only solo is offered.
+if (window.SOLO_ONLY) {
+  $('btn-host').remove();
+  document.querySelector('.row.join').remove();
+}
 
 // Keep the host's simulation alive while its tab is in the background.
 // Browsers throttle background timers, so step by real elapsed time rather than a fixed tick.
