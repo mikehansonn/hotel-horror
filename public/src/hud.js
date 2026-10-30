@@ -38,7 +38,15 @@ const TIPS = {
   cards: 'Read the check-in cards carefully. Some guests should NOT be let in. Press X to turn them away.',
   tiers: 'Fancy guests want fancy rooms. Pick the room type at the desk (1 Standard · 2 Suite · 3 Presidential). Renovate suites in the Manager\'s Office.',
   snoop: 'A guest wandered into a staff-only area! Walk up to them and press E to escort them out before they cause trouble.',
-  elevator: 'Some jobs are upstairs. Take the elevator at the end of the hallway behind the lobby (press E at the call button).',
+  elevator: 'Some jobs are upstairs. Take the elevator behind the lobby (press E at the call button), or the spiral stairs at either end of the hallway.',
+  dnd: 'A red light by a door means DO NOT DISTURB: the guests are inside. Barge in and they will hate you for it. Clean that room once they head out.',
+  slip: 'Someone slipped by the pool! Grab a first aid kit (lobby supplies rack, or beside the pool door) and hold E on them.',
+  lostkid: 'A kid is lost! Follow the marker, find them and press E to send them back to their family.',
+  lockout: 'A guest is locked out of their room. Take a spare key card from the rack behind the front desk and hand it over.',
+  drunk: 'A guest passed out in public. Hold E on them to get them up and off to bed before they make a mess.',
+  stuck: 'The elevator is stuck! Hold E at the elevator panel on the ground floor to reset it. Until then, everyone takes the stairs.',
+  raccoon: 'A raccoon got in! Grab a mop and hold E on it to chase it out before it raids the trash and the stove.',
+  vending: 'The vending machine by the elevators ate a guest\'s money. Hold E on the machine to give it a whack.',
   waypoint: 'The ◆ marker points at your most urgent job. Press R to cycle through jobs, G to ping a spot for your crew.',
 };
 
@@ -328,6 +336,8 @@ export class Hud {
     if (ics.has('❄️')) this.tip('cold');
     if (ics.has('🚷')) this.tip('snoop');
     if (snap.tk.some(t => L.floorOf(t.x) > 0)) this.tip('elevator');
+    if (snap.rm.some(st => st[1])) this.tip('dnd');
+    for (const [ic, tip] of [['🤕', 'slip'], ['😰', 'lostkid'], ['🚪', 'lockout'], ['🥴', 'drunk'], ['🛗', 'stuck'], ['🦝', 'raccoon'], ['🥤', 'vending']]) if (ics.has(ic)) this.tip(tip);
   }
 
   // Jobs that still need a person come first; a 🤖 tag marks ones a helper is already doing.
@@ -367,7 +377,7 @@ export class Hud {
     if (k !== this.trackKey) { this.trackKey = k; el.querySelector('.wp-ic').textContent = t.ic; }
     const tf = L.floorOf(t.x), myF = L.floorOf(ctx.pos.x);
     const d = Math.hypot(t.x - ctx.pos.x, t.z - ctx.pos.z);
-    el.querySelector('.wp-d').textContent = tf !== myF ? `${tf > myF ? '↑' : '↓'} ${L.FLOORS[tf].short} · elevator` : d < 2.5 ? 'here' : `${Math.round(d)}m`;
+    el.querySelector('.wp-d').textContent = tf !== myF ? `${tf > myF ? '↑' : '↓'} ${L.FLOORS[tf].short} · ${L.FLAGS.elev_out ? 'stairs' : 'stairs or elevator'}` : d < 2.5 ? 'here' : `${Math.round(d)}m`;
     const w = L.toWorld(t.x, t.z, 1.5);
     const v = this.v3.set(w.x, w.y, w.z).project(ctx.camera);
     const W = window.innerWidth, H = window.innerHeight;
@@ -422,7 +432,8 @@ export class Hud {
   // One base image per floor: the ground floor shows the whole property, upper floors the tower.
   mapBase(f, labels) {
     const key = `${f}|${labels ? 1 : 0}`;
-    return (this.bases[key] ||= this.drawMapBase(f, labels));
+    const k2 = `${key}|${L.stairsTop()}`; // redraw once the stairs exist
+    return (this.bases[k2] ||= this.drawMapBase(f, labels));
   }
 
   drawMapBase(f, labels) {
@@ -463,6 +474,15 @@ export class Hud {
       g.restore();
     }
     if (f === 0) { g.fillStyle = '#2f7f96'; g.fillRect(X(L.POOL.x1), Z(L.POOL.z1), (L.POOL.x2 - L.POOL.x1) * PX, (L.POOL.z2 - L.POOL.z1) * PX); }
+    // spiral staircases (once there's a floor to climb to): a ring with a pole
+    if (L.stairsTop() && f <= L.stairsTop()) for (const s of L.STAIRS) {
+      g.fillStyle = '#4a3226';
+      g.fillRect(X(s.x1 + o), Z(s.z1), (s.x2 - s.x1) * PX, (s.z2 - s.z1) * PX);
+      g.strokeStyle = '#d8c59a'; g.lineWidth = 2;
+      g.beginPath(); g.arc(X(s.cx + o), Z(s.cz), s.r * PX * 0.82, 0, 7); g.stroke();
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.beginPath(); g.moveTo(X(s.cx + o), Z(s.cz)); g.lineTo(X(s.cx + o) + Math.cos(a) * s.r * PX * 0.82, Z(s.cz) + Math.sin(a) * s.r * PX * 0.82); g.stroke(); }
+      if (labels) { g.fillStyle = '#f3e6c4'; g.font = 'bold 12px sans-serif'; g.fillText('STAIRS', X(s.cx + o), Z(s.z2) + 9); }
+    }
     g.fillStyle = '#c9c2b0';
     for (const w of L.WALLS) if (on((w.x1 + w.x2) / 2)) g.fillRect(X(w.x1), Z(w.z1), Math.max(1, (w.x2 - w.x1) * PX), Math.max(1, (w.z2 - w.z1) * PX));
     if (labels) {
@@ -515,6 +535,7 @@ export class Hud {
       g.fillRect(X(r.x1) + 1, Z(r.z1) + 1, (r.x2 - r.x1) * s - 2, (r.z2 - r.z1) * s - 2);
       const t = TIER_CODE[snap.ht?.t?.[i]];
       if (t && t !== 'basic') { g.strokeStyle = t === 'pres' ? '#ffd166' : '#a9c1ff'; g.lineWidth = 2; g.strokeRect(X(r.x1) + 2, Z(r.z1) + 2, (r.x2 - r.x1) * s - 4, (r.z2 - r.z1) * s - 4); }
+      if (st[1]) { g.fillStyle = '#ff2a2a'; g.beginPath(); g.arc(X(r.door.x), Z(r.door.z), big ? 5 : 3.5, 0, 7); g.fill(); } // DO NOT DISTURB
     });
     g.fillStyle = 'rgba(220,220,220,0.8)';
     for (const gu of snap.g) if (on(gu.x)) g.fillRect(X(gu.x) - 1.5, Z(gu.z) - 1.5, 3, 3);
@@ -706,7 +727,7 @@ export class Hud {
     const open = L.ROOMS.filter(r => !r.wing || flags[r.wing]).length;
     const suites = tiers.filter(t => t === 's').length;
     return `
-      <div class="hotel-sum"><span><b>${open}</b> rooms open</span><span><b>${suites}</b> suites</span><span>Presidential suite: <b>${flags.pres ? 'open' : 'not built'}</b></span><span class="dim">Build upward: every new storey adds 12 rooms, reached by the elevator.</span></div>
+      <div class="hotel-sum"><span><b>${open}</b> rooms open</span><span><b>${suites}</b> suites</span><span>Presidential suite: <b>${flags.pres ? 'open' : 'not built'}</b></span><span class="dim">Build upward: every new storey adds 12 rooms, reached by the elevator and the spiral stairs.</span></div>
       <div class="plan floors">${[...L.FLOORS].reverse().map(storey).join('')}</div>
       <div class="legend"><span class="lg basic"></span>Standard ×1 <span class="lg suite"></span>Suite ×${TIERS.suite.price} <span class="lg pres"></span>Presidential ×${TIERS.pres.price} · Click a standard room to renovate it. Fancy guests expect fancy rooms.</div>`;
   }

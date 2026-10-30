@@ -386,7 +386,8 @@ export function drawStatusBoard(ctx, rooms) {
     ctx.font = `bold ${Math.round(h * 0.42)}px monospace`;
     ctx.fillText(r.id === 'PRES' ? 'PRES' : r.id, x + w / 2, y + h * 0.52);
     ctx.font = `${Math.max(9, Math.round(h * 0.24))}px monospace`;
-    const label = r.st === 'vacant' ? 'READY' : r.st === 'occupied' ? 'IN USE' : 'DIRTY';
+    const label = r.st === 'vacant' ? 'READY' : r.st === 'occupied' ? (r.dnd ? 'DND' : 'IN USE') : 'DIRTY';
+    if (r.dnd) { ctx.fillStyle = '#ff2a2a'; ctx.beginPath(); ctx.arc(x + w - 7, y + 7, 4, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; }
     ctx.fillText(r.tier === 'suite' ? `${label}·S` : label, x + w / 2, y + h * 0.86);
   });
 }

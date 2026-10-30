@@ -435,7 +435,10 @@ export function animateCharacter(obj, anim, pose, t) {
     r.legL.rotation.x = r.legR.rotation.x = 0;
     r.armL.rotation.x = Math.sin(t * 1.3) * 0.04;
     r.armR.rotation.x = -Math.sin(t * 1.3) * 0.04 - (obj.userData.carrying ? 0.6 : 0);
+    // standing around: now and then glance about
+    r.head.rotation.y = Math.sin(t * 0.37) * Math.sin(t * 0.13) * 0.55;
   }
+  if (anim !== 'idle') r.head.rotation.y = 0;
 }
 
 // ---------- monsters ----------
@@ -499,6 +502,53 @@ export function buildShade() {
   const legL = new THREE.Group(), legR = new THREE.Group();
   root.userData = { rig: { body, legL, legR, armL: arms[1], armR: arms[0], head: body }, float: true };
   return root;
+}
+
+// A raccoon: grey and round, with a bandit's mask and a ringed tail.
+export function buildRaccoon() {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const fur = '#7d7a76', dark = '#2a2826', pale = '#cfcac2';
+  rbox(body, 0.36, 0.26, 0.6, fur, 0, 0.27, 0);
+  rbox(body, 0.3, 0.2, 0.24, pale, 0, 0.21, 0.12);
+  const head = new THREE.Group();
+  head.position.set(0, 0.36, 0.34);
+  body.add(head);
+  rbox(head, 0.26, 0.2, 0.22, fur, 0, 0, 0);
+  rbox(head, 0.27, 0.07, 0.1, dark, 0, 0.02, 0.07);
+  rbox(head, 0.1, 0.08, 0.12, pale, 0, -0.05, 0.13);
+  ball(head, 0.022, '#111111', 0, -0.03, 0.2);
+  for (const s of [-1, 1]) {
+    ball(head, 0.022, '#e8d27a', 0.065 * s, 0.03, 0.125);
+    const ear = rbox(head, 0.07, 0.08, 0.04, dark, 0.1 * s, 0.12, -0.02);
+    ear.rotation.z = -0.3 * s;
+  }
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.32, -0.3);
+  body.add(tail);
+  for (let i = 0; i < 5; i++) rbox(tail, 0.13, 0.13, 0.11, i % 2 ? dark : fur, 0, 0.03 * i, -0.08 - i * 0.09);
+  const legs = [];
+  for (const [x, z] of [[-0.12, 0.2], [0.12, 0.2], [-0.12, -0.2], [0.12, -0.2]]) {
+    const leg = new THREE.Group();
+    leg.position.set(x, 0.16, z);
+    body.add(leg);
+    rbox(leg, 0.08, 0.16, 0.08, dark, 0, -0.08, 0);
+    legs.push(leg);
+  }
+  root.userData = { critter: { body, head, tail, legs } };
+  root.scale.setScalar(1.1);
+  return root;
+}
+
+export function animateRaccoon(obj, anim, t) {
+  const c = obj.userData.critter;
+  const moving = anim === 'walk' || anim === 'run';
+  const f = anim === 'run' ? 16 : 9;
+  c.legs.forEach((l, i) => (l.rotation.x = moving ? Math.sin(t * f + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI : 0)) * 0.7 : 0));
+  c.body.position.y = moving ? Math.abs(Math.sin(t * f)) * 0.03 : 0;
+  c.tail.rotation.y = Math.sin(t * (moving ? 6 : 2)) * 0.35;
+  c.head.rotation.y = moving ? 0 : Math.sin(t * 1.4) * 0.5; // sniffing around
 }
 
 // ---------- carried items ----------
@@ -615,6 +665,22 @@ export function buildItem(type, opts = {}) {
       for (let i = 0; i < 3; i++) ball(g, 0.014, '#d9a322', Math.cos(i * 2.1 + 0.5) * 0.05, 0.081, Math.sin(i * 2.1 + 0.5) * 0.05, 1, 0.3, 1);
       break;
     }
+    case 'medkit':
+      rbox(g, 0.4, 0.26, 0.16, '#f2efe8', 0, 0.13, 0);
+      box(g, 0.405, 0.04, 0.165, '#c1121f', 0, 0.2, 0);
+      for (const s of [-1, 1]) {
+        box(g, 0.14, 0.04, 0.01, '#c1121f', 0, 0.12, 0.081 * s);
+        box(g, 0.04, 0.14, 0.01, '#c1121f', 0, 0.12, 0.081 * s);
+      }
+      box(g, 0.16, 0.03, 0.03, '#2b2b2b', 0, 0.29, 0);
+      for (const s of [-1, 1]) box(g, 0.03, 0.05, 0.03, '#2b2b2b', 0.065 * s, 0.27, 0);
+      break;
+    case 'keycard':
+      box(g, 0.1, 0.008, 0.064, '#f2efe8', 0, 0.004, 0);
+      box(g, 0.1, 0.009, 0.014, '#2b2b2b', 0, 0.005, -0.016);
+      box(g, 0.03, 0.009, 0.022, '#d4a017', -0.025, 0.005, 0.016);
+      box(g, 0.1, 0.004, 0.06, '#7a1f2b', 0.12, 0.002, 0.01).rotation.y = 0.3;
+      break;
     case 'pan': // what the stove shows under food that's cooking
       cyl(g, 0.16, 0.13, 0.04, '#232323', 0, 0.02, 0, 16);
       cyl(g, 0.14, 0.14, 0.005, '#3a3a3a', 0, 0.04, 0, 16);

@@ -1,11 +1,13 @@
 // Turns snapshots into moving meshes: guests, cars, items, messes, monsters, the UFO and teammates.
 import * as THREE from 'three';
 import * as L from './layout.js';
-import { buildCharacter, buildStaff, animateCharacter, buildItem, buildMess, buildCar, buildPorter, buildShade, buildUfo, disposeModel, buildHelper, animateHelper } from './models.js';
+import { buildCharacter, buildStaff, animateCharacter, buildItem, buildMess, buildCar, buildPorter, buildShade, buildRaccoon, animateRaccoon, buildUfo, disposeModel, buildHelper, animateHelper } from './models.js';
 import { makeLook } from './looks.js';
 import { emojiTexture, bubbleTexture, nameTexture, labelTexture } from './textures.js';
 import { PLAYER_COLORS, ITEMS, HELPERS } from './content.js';
 import { angleLerp } from './util.js';
+
+const NPC_DOOR = 2.1; // squared distance at which a guest, robot or monster opens a door
 
 function makeSprite(texture, w, h, depthTest = true) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest, transparent: true }));
@@ -56,13 +58,15 @@ export class View {
     this.twins = [];
   }
 
-  // Positions (in layout space, like the doors) of everyone who can open doors this frame.
+  // Positions (in layout space, like the doors) of everyone who can open doors this frame, each with
+  // how close (squared) they must come. Teammates swing doors open from further away than NPCs, who
+  // walk slower: a guest or robot waiting in the hallway shouldn't hold a door open.
   doorOpeners(me) {
     const out = [];
-    for (const o of this.guests.values()) out.push(o.sim);
+    for (const o of this.guests.values()) { o.sim.r2 = NPC_DOOR; out.push(o.sim); }
     for (const o of this.peers.values()) if (o.mesh.visible) out.push(o.sim);
-    for (const o of this.monsters.values()) out.push(o.sim);
-    for (const o of this.helpers.values()) if (o.mesh.visible && !o.small) out.push(o.sim);
+    for (const o of this.monsters.values()) { o.sim.r2 = NPC_DOOR; out.push(o.sim); }
+    for (const o of this.helpers.values()) if (o.mesh.visible && !o.small) { o.sim.r2 = NPC_DOOR; out.push(o.sim); }
     if (me) out.push(me);
     return out;
   }
@@ -262,9 +266,9 @@ export class View {
       const m = o.mesh;
       const y = h.y || 0;
       const hs = o.sim;
-      if (Math.abs(hs.x - h.x) > 4 || Math.abs(hs.z - h.z) > 4) { hs.x = h.x; hs.z = h.z; }
-      else { hs.x += (h.x - hs.x) * k; hs.z += (h.z - hs.z) * k; }
-      const hw = L.toWorld(hs.x, hs.z, y);
+      if (Math.abs(hs.x - h.x) > 4 || Math.abs(hs.z - h.z) > 4) { hs.x = h.x; hs.z = h.z; hs.y = y; }
+      else { hs.x += (h.x - hs.x) * k; hs.z += (h.z - hs.z) * k; hs.y += (y - (hs.y ?? y)) * k; }
+      const hw = L.toWorld(hs.x, hs.z, hs.y);
       m.position.set(hw.x, hw.y, hw.z);
       m.rotation.y = angleLerp(m.rotation.y, h.r, k);
       m.visible = !h.h;
@@ -456,8 +460,8 @@ export class View {
       seen.add(m.i);
       let o = this.monsters.get(m.i);
       if (!o) {
-        const mesh = m.k === 'porter' ? buildPorter() : buildShade();
-        const ow = L.toWorld(m.x, m.z);
+        const mesh = m.k === 'porter' ? buildPorter() : m.k === 'raccoon' ? buildRaccoon() : buildShade();
+        const ow = L.toWorld(m.x, m.z, m.y || 0);
         mesh.position.set(ow.x, ow.y, ow.z);
         this.scene.add(mesh);
         o = { mesh, k: m.k, sim: { x: m.x, z: m.z } };
@@ -465,12 +469,13 @@ export class View {
       }
       const mesh = o.mesh;
       o.sim.x = m.x; o.sim.z = m.z;
-      const mw = L.toWorld(m.x, m.z);
+      const mw = L.toWorld(m.x, m.z, m.y || 0);
       if ((mesh.position.x - mw.x) ** 2 + (mesh.position.z - mw.z) ** 2 > 16) mesh.position.set(mw.x, mw.y, mw.z);
       mesh.position.x += (mw.x - mesh.position.x) * k;
       mesh.position.z += (mw.z - mesh.position.z) * k;
-      mesh.position.y = mw.y;
+      mesh.position.y += (mw.y - mesh.position.y) * k;
       mesh.rotation.y = angleLerp(mesh.rotation.y, m.r, k);
+      if (o.k === 'raccoon') { animateRaccoon(mesh, m.a, this.time); continue; }
       if (mesh.userData.float) mesh.position.y = mw.y + 0.25 + Math.sin(this.time * 2.5) * 0.12;
       animateCharacter(mesh, m.a === 'stun' ? 'stun' : 'walk', null, this.time * (o.k === 'porter' ? 0.55 : 1));
       if (o.k === 'porter' && m.a !== 'stun') mesh.userData.rig.head.rotation.z = Math.sin(this.time * 1.3) * 0.25;

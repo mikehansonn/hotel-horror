@@ -6,6 +6,7 @@ import { carLength } from './models.js';
 
 const EYE = 1.62;
 const RADIUS = 0.35;
+const STAIR_RADIUS = 0.22; // slimmer on a spiral staircase, so you fit between the pole and the rail
 const tmpV = new THREE.Vector3();
 
 export class Player {
@@ -75,6 +76,13 @@ export class Player {
     this.pitch = -0.05;
   }
 
+  // Halfway up (or down) a spiral staircase you're on the next floor's half of the stairwell.
+  changeFloor() {
+    const f = this.floor;
+    if (this.pos.y > L.FLOOR_H / 2 && f < L.stairsTop()) { this.pos.x += L.FLOOR_DX; this.pos.y -= L.FLOOR_H; }
+    else if (this.pos.y < -L.FLOOR_H / 2 && f > 0 && !L.inPool(this.pos.x, this.pos.z)) { this.pos.x -= L.FLOOR_DX; this.pos.y += L.FLOOR_H; }
+  }
+
   pose() {
     return {
       k: 'p', x: +this.pos.x.toFixed(2), y: +this.pos.y.toFixed(2), z: +this.pos.z.toFixed(2),
@@ -122,20 +130,23 @@ export class Player {
     this.vel.x += (mx * speed - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (mz * speed - this.vel.z) * Math.min(1, accel * dt);
     const next = { x: this.pos.x + this.vel.x * dt, z: this.pos.z + this.vel.z * dt };
-    L.resolveCircle(next, RADIUS, 'player');
+    L.resolveCircle(next, L.inStairwell(this.pos.x, this.pos.z) ? STAIR_RADIUS : RADIUS, 'player');
     this.pos.x = next.x;
     this.pos.z = next.z;
 
-    const ground = L.floorY(this.pos.x, this.pos.z);
+    const ground = L.surfaceY(this.pos.x, this.pos.z, this.pos.y);
     if (input && k.Space && (this.onGround || inWater)) { this.vy = inWater ? 3.2 : 4.6; this.onGround = false; }
     this.vy -= (inWater ? 6 : 13) * dt;
     this.pos.y += this.vy * dt;
+    // walk down stairs instead of hopping down them
+    if (this.onGround && this.vy <= 0 && this.pos.y > ground && this.pos.y - ground < 0.5) this.pos.y = ground;
     if (this.pos.y <= ground) {
       if (!this.onGround && this.vy < -6) ctx.onLand?.();
       this.pos.y = ground;
       this.vy = 0;
       this.onGround = true;
     } else if (this.pos.y > ground + 0.05) this.onGround = false;
+    this.changeFloor();
     const nowWater = L.inPool(this.pos.x, this.pos.z) && this.pos.y < -0.4;
     if (nowWater && !this.wasInWater) ctx.onSplash?.();
     this.wasInWater = nowWater;

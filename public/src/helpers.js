@@ -8,6 +8,9 @@ import { rand, pick, chance } from './util.js';
 const r2 = v => Math.round(v * 100) / 100;
 const dsq = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 const at = id => { const a = L.APPROACH[id]; return { x: a[0], z: a[1] }; };
+// Where to wait when delivering to a room: the middle of the hallway outside, far enough back that the
+// door stays shut.
+const knockSpot = room => { const n = L.NODES[L.ROOM_BY_ID[room].hall]; return { x: n.x, z: n.z }; };
 const carSide = c => ({ x: c.x + Math.cos(c.ry) * 1.4, z: c.z - Math.sin(c.ry) * 1.4 });
 
 const SPEED = { roomba: 1.0, skimmer: 0.8, valet: 2.0, bellhop: 1.5, housekeeper: 1.35, chef: 1.0, busboy: 1.3, towelbot: 1.4, electrician: 1.6, guard: 1.45, doorman: 1.3 };
@@ -35,21 +38,6 @@ function turnToward(a, b, k) {
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   return a + d * Math.min(1, k);
-}
-
-// Like L.nearestNode, but never a spot in the pool: helpers walk around it, not through it.
-function navNode(x, z) {
-  const zn = L.zoneAt(x, z);
-  const zk = zn.room ? `R${zn.room}` : zn.id;
-  let best = null, bd = Infinity, any = null, ad = Infinity;
-  for (const id in L.NODES) {
-    const nd = L.NODES[id];
-    if (nd.pose === 'swim' || !L.isActive(nd)) continue;
-    const d = (nd.x - x) ** 2 + (nd.z - z) ** 2;
-    if (d < ad) { ad = d; any = id; }
-    if (nd.zk === zk && d < bd) { bd = d; best = id; }
-  }
-  return best || any;
 }
 
 export const helperMethods = {
@@ -127,32 +115,15 @@ export const helperMethods = {
 
   // ---------- movement ----------
   hGo(h, x, z, run = 1) {
-    const tgt = { x, z };
-    const from = navNode(h.x, h.z), to = navNode(x, z);
-    const pts = (from && to && L.findPath(from, to) || []).map(id => L.NODES[id]);
-    // Don't walk back to a node we're already past, or past the target to the node beyond it.
-    if (pts.length > 1 && dsq(h, pts[1]) < dsq(pts[0], pts[1])) pts.shift();
-    if (pts.length > 1) {
-      const a = pts[pts.length - 2], b = pts[pts.length - 1];
-      if (a.zk === b.zk && dsq(a, tgt) < dsq(a, b)) pts.pop();
-    } else if (pts.length === 1 && dsq(h, tgt) <= dsq(h, pts[0])) pts.pop();
-    if (pts.length && dsq(h, pts[0]) < 0.09) pts.shift();
-    h.path = pts.map(n => ({ x: n.x, z: n.z }));
-    h.path.push(tgt);
+    h.path = L.planPath(h.x, h.z, { x, z });
     h.run = run;
   },
 
   // Advances along the path; true once there.
   hStep(h, dt) {
-    const t = h.path[0];
-    if (!t) return true;
+    if (!h.path.length) return true;
     if (this.ride(h, h.path, dt)) return !h.path.length; // taking the elevator
-    const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz);
-    const step = h.speed * h.run * (L.inPool(h.x, h.z) ? 0.6 : 1) * dt;
-    if (d <= step) { h.x = t.x; h.z = t.z; h.path.shift(); }
-    else { h.x += (dx / d) * step; h.z += (dz / d) * step; }
-    if (d > 0.01) h.ry = Math.atan2(dx, dz);
-    h.y = L.inPool(h.x, h.z) ? L.POOL.floorY + 0.35 : 0;
+    this.stepAlong(h, h.path, h.speed * h.run, dt);
     h.anim = h.run > 1.4 ? 'run' : 'walk';
     return !h.path.length;
   },
@@ -548,8 +519,8 @@ export const helperMethods = {
       if (!p || rq.t < p.request.t) p = q;
     }
     if (!p) return false;
-    const rq = p.request, door = L.STATIONS[`door_${p.room}`];
-    return this.chefJob(h, `q${p.id}`, [rq.dish], `Room service for ${L.roomName(p.room)}`, { x: door.x, z: door.z },
+    const rq = p.request;
+    return this.chefJob(h, `q${p.id}`, [rq.dish], `Room service for ${L.roomName(p.room)}`, knockSpot(p.room),
       () => p.request === rq, () => { this.hDrop(h); this.fulfill(p, null); });
   },
 
@@ -650,8 +621,8 @@ export const helperMethods = {
     return this.hJob(h, `t${p.id}`, `Towels for ${L.roomName(p.room)}`, [
       { go: at(shelf) },
       { wait: 1.2, anim: 'work', face: L.STATIONS[shelf], then: () => { h.carry = this.spawnItem('towels', h.x, 1, h.z, { holder: -h.id }).id; } },
-      { go: { x: door.x, z: door.z } },
-      { wait: 0.8, anim: 'work', then: () => { this.hDrop(h); this.fulfill(p, null); h.job.done = true; } },
+      { go: knockSpot(p.room) },
+      { wait: 0.8, anim: 'work', face: door, then: () => { this.hDrop(h); this.fulfill(p, null); h.job.done = true; } },
     ], () => p.request === rq);
   },
 
@@ -714,7 +685,7 @@ export const helperMethods = {
     if (!h.fl) return;
     const hz = L.zoneAt(h.x, h.z);
     for (const m of Object.values(this.monsters)) {
-      if (m.stun > 0) continue;
+      if (m.stun > 0 || m.k === 'raccoon') continue;
       const d2 = dsq(h, m);
       if (d2 > 64) continue;
       const mz = L.zoneAt(m.x, m.z);

@@ -221,8 +221,10 @@ $('howto').innerHTML = `
   <p><b>The Last Resort</b> sits alone at the top of a mountain road. When the snow comes, nobody gets in or out.</p>
   <p><b>Goal:</b> survive seven shifts. Every guest leaves a review when they check out. If a shift's average rating ends below the target, corporate shuts you down. Pass, and you get money for upgrades.</p>
   <p><b>The job:</b> check guests in at the front desk computer (and pick the right kind of room), park their cars, carry their luggage, deliver towels and room service, cook breakfast, clean rooms, mop up messes, skim the pool, fix the power, walk snooping guests out of staff areas, and check guests out. Everything is on the task list at the right; the ◆ marker points at the most urgent job.</p>
+  <p><b>Guest rooms:</b> a red light by a door means DO NOT DISTURB: the guests are in. Walk in on them and they'll hate you for it, so clean that room once they've gone out.</p>
+  <p><b>Things go wrong:</b> kids slip by the pool or get lost, guests lock themselves out, the elevator jams, a raccoon gets in. Each one goes on the task list with a timer. First aid kits are on the lobby supplies rack and by the pool; spare key cards are behind the front desk.</p>
   <p><b>The kitchen:</b> cook from the fridge, stir cheese into eggs for omelettes, and get burnt food off the stove before it catches fire (the extinguisher is by the island). Cleared tables give you dirty dishes for the sink, and no clean plates means no breakfast. Plates set on the pass can be picked up from the dining room.</p>
-  <p><b>Between shifts:</b> spend your budget in the Manager's Office. Build new floors on top of the hotel (the elevator takes you up), add a presidential suite, renovate rooms into suites, and hire robots and staff who do jobs for you.</p>
+  <p><b>Between shifts:</b> spend your budget in the Manager's Office. Build new floors on top of the hotel (reached by the elevator or the spiral stairs at either end of the hallway), add a presidential suite, renovate rooms into suites, and hire robots and staff who do jobs for you.</p>
   <p><b>Closing time:</b> a shift only ends once every job on the list is done.</p>
   <p><b>The night:</b> each shift brings stranger guests. Read the check-in cards. Some guests should never be let in.</p>
   <div class="controls">${CONTROLS}</div>

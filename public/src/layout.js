@@ -47,8 +47,16 @@ export const BLOCKS = [
 ];
 export const STAFF_ZONES = new Set(['kitchen', 'laundry', 'utility', 'staff', 'storage', 'linen', 'closet']);
 export const HEDGE_MAZE = { x1: -66, x2: -40, z1: -9, z2: 7 };
+// Spiral staircases in the hallway corner at each end of the tower, one full turn per storey, with the
+// opening facing down the hallway. Climbing turns clockwise on the map (the angle atan2(dz, dx) grows),
+// starting from the opening at angle `exit`. They exist once there's a second floor to climb to.
+export const STAIRS = [
+  { id: 'west', x1: -29.85, x2: -27.25, z1: -21.85, z2: -19.25, exit: 0 },
+  { id: 'east', x1: 17.25, x2: 19.85, z1: -21.85, z2: -19.25, exit: Math.PI },
+].map(s => ({ ...s, cx: (s.x1 + s.x2) / 2, cz: (s.z1 + s.z2) / 2, r: (s.x2 - s.x1) / 2 }));
 
 const PI = Math.PI;
+const TAU = 2 * PI;
 
 export const FLAGS = {};
 export const isActive = o => (!o.on || !!FLAGS[o.on]) && (!o.off || !FLAGS[o.off]) && (!o.gate || !!FLAGS[o.gate]);
@@ -327,7 +335,7 @@ export function roomDecor(r, tier, extras = {}) {
 function makePres() {
   const X = x => x + FLOOR_DX, id = 'PRES';
   const r = { id, cx: X(25), side: 'E', s: 1, wallZ: null, wing: 'pres', pres: true, hall: null, x1: X(20), x2: X(30), z1: -29, z2: -11 };
-  r.door = { x: X(20), z: -20 };
+  r.door = { x: X(20), z: -18.7 }; // beside the east staircase at the end of the hallway
   r.bathBox = [X(20), -16, X(30), -11];
   r.bed = { x: X(25), z: -27.4 };
   r.toilet = { x: X(29.4), z: -12.0 };
@@ -365,10 +373,10 @@ function makePres() {
   furn('toilet', X(29.4), -12.0, -PI / 2, { w: 0.45, d: 0.65 });
   furn('shower', X(20.95), -12.6, 0, { w: 1.6, d: 1.6 });
   furn('thermostat', X(20.16), -22.6, PI / 2, { room: id });
-  station('door_PRES', 'door', X(19.55), 1.3, -20, 0.8, { room: id });
+  station('door_PRES', 'door', X(19.55), 1.3, -18.7, 0.6, { room: id });
   station('curtain_PRES', 'curtain', r.window.x, 1.55, -28.75, 0.6, { room: id });
   station('thermo_PRES', 'thermo', X(20.3), 1.45, -22.6, 0.3, { room: id });
-  node('rPRES_in', X(21.6), -20);
+  node('rPRES_in', X(21.0), -18.8);
   node('rPRES_mid', X(25.6), -20);
   node('rPRES_m2', X(28.5), -20);
   node('rPRES_desk', X(23.2), -23.0, { pose: 'sit', ry: 0 });
@@ -392,14 +400,17 @@ MAIN_CX.forEach((cx, i) => ROOMS.push(makeRoom(String(107 + i), cx, 'S')));
 for (const r of ROOMS) ROOM_BY_ID[r.id] = r;
 
 // ---------- hallway ----------
-const hallXs = [...MAIN_CX.map(doorX), -27.5, -22.5, 0, 24, 27.5].sort((a, b) => a - b);
+const hallXs = [...MAIN_CX.map(doorX), -26.4, -22.5, 0, 24, 27.5].sort((a, b) => a - b);
 for (const x of hallXs) node(`h${x}`, x, -20);
-chain(hallXs.map(x => `h${x}`));
+// Past Room 106 the hallway steps around the east staircase in the corner.
+node('h_se1', 16.7, -18.7);
+node('h_se2', 20.7, -18.7);
+chain([...hallXs.filter(x => x < 20).map(x => `h${x}`), 'h_se1', 'h_se2', ...hallXs.filter(x => x > 20).map(x => `h${x}`)]);
 for (const r of ROOMS) link(r.hall, `r${r.id}_in`);
-PATROL.push('h-27.5', 'h-12.6', 'h0', 'h15.4', 'h27.5');
+PATROL.push('h-26.4', 'h-12.6', 'h0', 'h15.4', 'h27.5');
 node('conn', 0, -14.5);
 link('conn', 'h0');
-node('elev', 0, -25.4, { ry: PI });
+node('elev', 0, -25.4, { ry: PI, lift: true });
 link('elev', 'h0');
 station('elev_0', 'elevator', 1.45, 1.2, -28.7, 0.4, { floor: 0 });
 for (const x of [-17, -9, 9, 17]) furn('sconce', x, -21.8, 0, { y: 2.2 });
@@ -410,6 +421,9 @@ furn('exitSign', 29.8, -20, -PI / 2, { y: 2.6 });
 // elevator alcove
 furn('elevator', 0, -28.85, 0);
 furn('vending', -1.55, -26.4, PI / 2, { w: 1.2, d: 0.8 });
+station('vending', 'vending', -1.1, 1.2, -26.4, 0.55);
+node('vend', -0.55, -26.4, { ry: -PI / 2 });
+link('vend', 'elev');
 furn('iceMachine', 1.55, -26.4, -PI / 2, { w: 1.0, d: 0.8 });
 furn('snackMachine', -1.55, -23.6, PI / 2, { on: 'vending', w: 1.0, d: 0.8 });
 for (const [x, seed] of [[-1.62, 1], [1.62, 2]]) furn('arcade', x, -28.35, 0, { on: 'arcade', w: 0.65, d: 0.7, seed });
@@ -419,6 +433,8 @@ furn('frontDesk', 6, -7.2, 0, { w: 5, d: 0.8 });
 furn('backCounter', 6.6, -10.55, 0, { w: 6.2, d: 0.6 });
 furn('statusBoard', 6.6, -10.83, 0, { y: 2.05 });
 station('desk', 'desk', 6.0, 1.25, -7.35, 0.5);
+furn('keyRack', 3.95, -10.8, 0, {});
+station('spare_keys', 'shelf', 3.95, 1.45, -10.6, 0.4, { item: 'keycard', label: 'Spare Key Cards' });
 furn('sofa', -8.1, 4.8, 0, { w: 2.6, d: 0.85, color: '#7a2531' });
 furn('coffeeTable', -8.1, 6.5, 0, { w: 1.4, d: 0.8 });
 furn('armchair', -5.6, 6.4, -PI / 2, { w: 0.9, d: 0.9, color: '#7a2531' });
@@ -628,10 +644,28 @@ for (const [x, z, w, ry] of [[-15, -29.9, 24, 0], [15, -29.9, 24, 0], [-30.9, -2
   const mx = c => M.x1 + c * cw, mz = r => M.z1 + r * ch;
   const H = (r, a, b) => furn('mazeHedge', (mx(a) + mx(b)) / 2, mz(r), 0, { w: mx(b) - mx(a) + 0.8, d: 0.8 });
   const V = (c, a, b) => furn('mazeHedge', mx(c), (mz(a) + mz(b)) / 2, PI / 2, { w: mz(b) - mz(a) + 0.8, d: 0.8 });
-  H(0, 0, 8); H(5, 0, 3); H(5, 4, 8); V(0, 0, 5); V(8, 0, 2); V(8, 3, 5);
-  for (const [r, a, b] of [[1, 1, 4], [1, 5, 8], [2, 2, 3], [2, 4, 6], [3, 1, 2], [3, 3, 5], [3, 6, 7], [4, 2, 4], [4, 5, 8]]) H(r, a, b);
-  for (const [c, a, b] of [[1, 1, 3], [2, 2, 4], [3, 1, 2], [4, 3, 5], [5, 1, 3], [6, 2, 4], [7, 1, 2], [7, 3, 4]]) V(c, a, b);
+  // [line, from, to]: hedges along a row line (between cell rows) or a column line. Every cell connects;
+  // the winding route from the east gate ends at the statue in the middle.
+  const rows = [[0, 0, 8], [5, 0, 3], [5, 4, 8], [1, 1, 4], [1, 5, 6], [2, 2, 7], [3, 1, 5], [3, 6, 7], [4, 1, 7]];
+  const cols = [[0, 0, 5], [8, 0, 2], [8, 3, 5], [1, 1, 4], [4, 0, 1], [5, 1, 3], [7, 1, 2], [7, 3, 4]];
+  rows.forEach(w => H(...w));
+  cols.forEach(w => V(...w));
   furn('mazeStatue', mx(4.5), mz(2.5), 0, { w: 1.2, d: 1.2 });
+  // A node in every cell, linked wherever no hedge stands between neighbours (lost children find it).
+  const cell = (c, r) => `mz_${c}_${r}`;
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 8; c++) {
+    const statue = c === 4 && r === 2; // the statue fills the middle of this dead end
+    node(cell(c, r), mx(c + 0.5) - (statue ? 1.05 : 0), mz(r + 0.5), statue ? { ry: PI / 2 } : {});
+  }
+  const walled = (list, line, i) => list.some(([l, a, b]) => l === line && i >= a && i < b);
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 8; c++) {
+    if (c < 7 && !walled(cols, c + 1, r)) link(cell(c, r), cell(c + 1, r));
+    if (r < 4 && !walled(rows, r + 1, c)) link(cell(c, r), cell(c, r + 1));
+  }
+  node('maze_out', mx(8) + 1.4, mz(2.5) - 1.6);
+  node('maze_turn', -37.3, mz(2.5) - 1.6);
+  node('maze_path', -37.3, 8.6);
+  chain([cell(7, 2), 'maze_out', 'maze_turn', 'maze_path']); // joins the street once that exists
   furn('postSign', mx(8) + 1.4, mz(2.5) + 1.8, PI / 2, { text: 'HEDGE MAZE · CLOSED FOR THE WINTER' });
 }
 furn('vacancySign', 33.5, 18.6, 0, { w: 3, d: 0.5 });
@@ -656,7 +690,10 @@ TOOL_HOMES.push(
   { t: 'mop', x: -8.0, z: -10.3 }, { t: 'mop', x: -7.25, z: -10.3 }, { t: 'net', x: -6.4, z: -10.3 },
   { t: 'plunger', x: -5.4, z: -10.3 }, { t: 'mop', x: -29.3, z: -12.0 }, { t: 'plunger', x: -28.5, z: -12.0 },
   { t: 'net', x: 11.0, z: -10.35 }, { t: 'extinguisher', x: -23.95, z: -6.6 },
+  { t: 'medkit', x: 12.3, z: -10.45 }, { t: 'medkit', x: -4.45, z: -10.45 },
 );
+furn('firstAid', 12.3, -10.83, 0, {});
+furn('firstAid', -4.45, -10.83, 0, {});
 EXTRA_TOOL_HOMES.push({ t: 'mop', x: 24.6, z: -12.4 }, { t: 'mop', x: -0.7, z: -24.3 }, { t: 'net', x: 12.6, z: 7.4 }, { t: 'plunger', x: 0.7, z: -24.3 });
 
 // Where helpers stand while they wait for work.
@@ -694,6 +731,7 @@ node('walk_e', 15, 9.3);
 node('street_w', -36, 9.3);
 node('street_e', 36, 9.3);
 chain(['street_w', 'walk_w', 'curb_w', 'curb_c', 'curb_e', 'walk_e', 'street_e']);
+link('maze_path', 'street_w');
 link('door_out', 'curb_c');
 link('door_in', 'door_out');
 
@@ -704,7 +742,7 @@ node('lob_nw', -8.3, -8.2);
 node('lob_nw2', -7.9, -4.2);
 node('lob_n', 0, -8.6);
 node('lob_pool', 8.4, 3.5);
-for (let i = 0; i < 7; i++) QUEUE.push(node(`q${i}`, 6.0, -6.0 + i * 1.1, { ry: PI }));
+for (let i = 0; i < 7; i++) QUEUE.push(node(`q${i}`, 6.0, -6.0 + i * 1.1, { ry: PI, queue: true })); // only for queuing, not a shortcut
 chain(QUEUE);
 link('door_in', 'lob_c');
 link('door_in', 'lob_sofa');
@@ -826,16 +864,20 @@ function buildFloor(F) {
   hWall(-22, X(-30), X(20), gaps);
   hWall(-18, X(-30), X(20), gaps);
   for (const x of [-20, -14, -8, -2, 2, 8, 14]) { vWall(X(x), -29, -22); vWall(X(x), -18, -11); }
-  vWall(X(20), -29, -11, [[-21.2, -18.8]]);
+  vWall(X(20), -29, -11, [[-19.2, -18.2]]); // the end door, beside the east staircase
   const first = ROOMS.length;
   MAIN_CX.forEach((cx, i) => ROOMS.push(makeRoom(String(F.first + i), X(cx), 'N', F.flag)));
   MAIN_CX.forEach((cx, i) => ROOMS.push(makeRoom(String(F.first + 6 + i), X(cx), 'S', F.flag)));
-  const xs = [...MAIN_CX.map(cx => doorX(X(cx))), X(-27.5), X(-22.5), X(0), X(18.6)].sort((a, b) => a - b);
+  const xs = [...MAIN_CX.map(cx => doorX(X(cx))), X(-26.4), X(-22.5), X(0)].sort((a, b) => a - b);
   const hall = xs.map(x => node(`h${x}`, x, -20));
   chain(hall);
   for (const r of ROOMS.slice(first)) link(r.hall, `r${r.id}_in`);
   const hAt = x => hall[xs.indexOf(xs.reduce((b, v) => (Math.abs(v - X(x)) < Math.abs(b - X(x)) ? v : b)))];
-  node(`elev@${n}`, X(0), -25.4, { ry: PI });
+  // past Room x06 the hallway steps around the east staircase to the door at the end
+  node(`hse@${n}`, X(16.7), -18.7);
+  node(`hend@${n}`, X(19.3), -18.7);
+  chain([hAt(15.4), `hse@${n}`, `hend@${n}`]);
+  node(`elev@${n}`, X(0), -25.4, { ry: PI, lift: true });
   link(`elev@${n}`, hAt(0));
   node(`land@${n}`, X(0), -14.2);
   link(`land@${n}`, hAt(0));
@@ -846,7 +888,7 @@ function buildFloor(F) {
   node(`clo_c@${n}`, X(-26), -14.4);
   chain([hAt(-22.5), `clo_in@${n}`, `clo_c@${n}`]);
   WANDER.push(`land@${n}`, hAt(-12.6), hAt(9.4));
-  PATROL.push(hAt(-27.5), hAt(-12.6), hAt(0), hAt(15.4), `land@${n}`);
+  PATROL.push(hAt(-26.4), hAt(-12.6), hAt(0), hAt(15.4), `land@${n}`);
   station(`elev_${F.f}`, 'elevator', X(1.45), 1.2, -28.7, 0.4, { floor: F.f });
   station(`towels@${n}`, 'shelf', X(-28.9), 1.1, -25.5, 0.65, { item: 'towels', label: 'Towels' });
   APPROACH[`towels@${n}`] = [X(-28.2), -25.5];
@@ -884,20 +926,20 @@ function buildFloor(F) {
   for (const x of [22.5, 27.5]) WINDOWS.push({ x: X(x), z: -11, axis: 'x', w: 1.8, side: 1, wing: F.flag });
 
   if (F.f === 1) { // the presidential suite, sealed until it's bought
-    collider(X(19.85), -21.2, X(20.15), -18.8, 'all', { off: 'pres' });
-    furn('barrier', X(20), -20, -PI / 2, { off: 'pres', w: 2.4, label: 'PRESIDENTIAL SUITE' });
+    collider(X(19.85), -19.2, X(20.15), -18.2, 'all', { off: 'pres' });
+    furn('barrier', X(20), -18.7, -PI / 2, { off: 'pres', w: 1.2, label: 'PRESIDENTIAL SUITE' });
     GATE = 'pres';
     const pres = makePres();
-    pres.hall = hAt(18.6);
+    pres.hall = `hend@${n}`;
     ROOMS.push(pres);
     link(pres.hall, 'rPRES_in');
-    DOORS.push({ x: X(20), z: -20, axis: 'z', w: 2.4, room: 'PRES', double: true, wing: 'pres' });
+    DOORS.push({ x: X(20), z: -18.7, axis: 'z', w: 1.0, room: 'PRES', wing: 'pres' });
     GATE = F.flag;
   }
   if (F.f === 2) { // the lounge: a roaring fire, deep sofas and a typewriter nobody admits to using
-    node(`lng_in@${n}`, X(21.6), -20);
+    node(`lng_in@${n}`, X(21.0), -18.8);
     node(`lng_c@${n}`, X(24), -20);
-    chain([hAt(18.6), `lng_in@${n}`, `lng_c@${n}`]);
+    chain([`hend@${n}`, `lng_in@${n}`, `lng_c@${n}`]);
     WANDER.push(`lng_c@${n}`);
     furn('fireplace', X(29.45), -20, -PI / 2, { w: 3.0, d: 0.9 });
     furn('rug', X(25.5), -20, 0, { rw: 5.2, rd: 6.0, color: '#7a2a18' });
@@ -912,7 +954,7 @@ function buildFloor(F) {
     for (const [x, z] of [[20.8, -28.3], [29.3, -11.8], [20.8, -11.8]]) furn('plant', X(x), z, 0, { w: 0.7, d: 0.7 });
     furn('chandelier', X(25), -20, 0, {});
     furn('painting', X(25), -11.17, PI, { y: 1.9, seed: 9, big: true });
-    sign('THE LOUNGE', X(20) - 0.16, 2.75, -20, -PI / 2, 1.6, 0.36);
+    sign('LOUNGE', X(20) - 0.16, 2.6, -18.7, -PI / 2, 0.95, 0.3);
     for (const [x, z, ry] of [[25.3, -23.4, 0], [26.7, -23.4, 0], [25.3, -16.6, PI], [26.7, -16.6, PI]]) {
       const id = node(`lng_s${LOUNGE.length}@${n}`, X(x), z, { pose: 'sit', ry, spot: true });
       LOUNGE.push(id);
@@ -927,10 +969,119 @@ for (const r of ROOMS) ROOM_BY_ID[r.id] = r;
 link('elev', 'elev@2');
 link('elev@2', 'elev@3');
 
+// ---------- staircases ----------
+// Railings close the shaft's open sides except for the opening; a stop beside the opening keeps anyone
+// from stepping off where the spiral ends (below the first step downstairs, past the last one on top).
+// NPCs follow nodes up the helix, 45° apart. The halfway node is doubled, once on each floor: reaching
+// it means stepping onto the upper floor's half of the stairwell (see Sim.ride()).
+const hallNodeNear = (x, f) => {
+  let best = null, bd = Infinity;
+  for (const id in NODES) {
+    const nd = NODES[id];
+    if (!/^h-?\d/.test(id) || floorOf(nd.x) !== f || Math.abs(nd.z + 20) > 0.01) continue;
+    const d = Math.abs(nd.x - x);
+    if (d < bd) { bd = d; best = id; }
+  }
+  return best;
+};
+for (const s of STAIRS) {
+  const open = s.exit === 0 ? s.x2 : s.x1;   // the side facing down the hallway
+  const out = s.exit === 0 ? 1 : -1;
+  const upZ = Math.cos(s.exit);               // the climb starts on this side of the opening
+  const xa = s.exit === 0 ? s.cx + 0.13 : s.x1, xb = s.exit === 0 ? s.x2 : s.cx - 0.13;
+  const t = 0.05;
+  for (const F of FLOORS) {
+    const o = F.f * FLOOR_DX, here = { on: F.f ? F.flag : 'floor2' };
+    collider(s.x1 + o, s.z2 - t, s.x2 + o, s.z2 + t, 'all', here);
+    collider(open + o - t, s.z1, open + o + t, s.cz - 0.6, 'all', here);
+    collider(open + o - t, s.cz + 0.6, open + o + t, s.z2, 'all', here);
+    if (s.id === 'east' && !F.f) collider(s.x2 - t, s.z1, s.x2 + t, s.z2, 'all', here); // no end wall downstairs
+    collider(s.cx + o - 0.12, s.cz - 0.12, s.cx + o + 0.12, s.cz + 0.12, 'all', here);
+    if (!F.f) collider(xa, s.cz - upZ * 0.04 - 0.02, xb, s.cz - upZ * 0.04 + 0.02, 'all', here);
+    if (F.f === FLOORS.length - 1) collider(xa + o, s.cz + upZ * 0.04 - 0.02, xb + o, s.cz + upZ * 0.04 + 0.02, 'all', here);
+    else if (F.f) collider(xa + o, s.cz + upZ * 0.04 - 0.02, xb + o, s.cz + upZ * 0.04 + 0.02, 'all', { on: F.flag, off: FLOORS[F.f + 1].flag });
+    const entry = node(`st_${s.id}@${F.f}`, open + out * 0.55 + o, s.cz, { ...here, stairEntry: true });
+    link(entry, hallNodeNear(open + out * 0.9 + o, F.f));
+    furn('stairRail', s.cx + o, s.cz, 0, { ...here, exit: s.exit, r: s.r, east: s.id === 'east' && !F.f });
+    if (F.f === FLOORS.length - 1) furn('stairStop', s.cx + o, s.cz, 0, { ...here, exit: s.exit, r: s.r });
+    else if (F.f) furn('stairStop', s.cx + o, s.cz, 0, { on: F.flag, off: FLOORS[F.f + 1].flag, exit: s.exit, r: s.r });
+  }
+  for (let k = 0; k < FLOORS.length - 1; k++) {
+    const flag = FLOORS[k + 1].flag, lo = k * FLOOR_DX, hi = lo + FLOOR_DX;
+    const ids = [`st_${s.id}@${k}`];
+    for (let i = 1; i <= 7; i++) {
+      const a = s.exit + (i * PI) / 4;
+      const x = s.cx + Math.cos(a) * 0.72, z = s.cz + Math.sin(a) * 0.72;
+      if (i <= 4) ids.push(node(`st_${s.id}_${k}_${i}`, x + lo, z, { on: flag, stair: true }));
+      if (i >= 4) ids.push(node(`st_${s.id}_${k}_${i}u`, x + hi, z, { on: flag, stair: true }));
+    }
+    ids.push(`st_${s.id}@${k + 1}`);
+    chain(ids);
+    furn('spiralFlight', s.cx + lo, s.cz, 0, { on: flag, exit: s.exit, r: s.r });
+  }
+}
+
 // ---------- queries ----------
 export function inRect(x, z, r) { return x >= r.x1 && x <= r.x2 && z >= r.z1 && z <= r.z2; }
 export function inPool(x, z) { return x > POOL.x1 && x < POOL.x2 && z > POOL.z1 && z < POOL.z2; }
 export function floorY(x, z) { return inPool(x, z) ? POOL.floorY : 0; }
+
+// The staircase shaft at a layout point, if any (whether or not the stairs are built yet).
+export function stairAt(x, z) {
+  const wx = x - floorOf(x) * FLOOR_DX;
+  for (const s of STAIRS) if (wx > s.x1 && wx < s.x2 && z > s.z1 && z < s.z2) return s;
+  return null;
+}
+// The highest floor the stairs reach (0: no stairs yet).
+export const stairsTop = () => (FLAGS.floor3 ? 2 : FLAGS.floor2 ? 1 : 0);
+// A built stairwell at a layout point: somewhere to walk only by climbing.
+export const inStairwell = (x, z) => !!stairsTop() && !!stairAt(x, z) && floorOf(x) <= stairsTop();
+
+const STEP = 0.45; // the highest step anyone takes without jumping
+// Where the ground is (relative to the floor) for someone at height y: the highest surface at or just
+// above their feet. Flat everywhere except the pool and the spirals, where the helix stacks one turn
+// per storey and the ground floor runs on under the first turn.
+export function surfaceY(x, z, y = 0) {
+  if (inPool(x, z)) return POOL.floorY;
+  const s = inStairwell(x, z) && stairAt(x, z);
+  if (!s) return 0;
+  const f = floorOf(x), wx = x - f * FLOOR_DX;
+  const frac = ((((Math.atan2(z - s.cz, wx - s.cx) - s.exit) % TAU) + TAU) % TAU) / TAU;
+  const reach = f * FLOOR_H + y + STEP;
+  let best = f === 0 ? 0 : -Infinity;
+  for (let k = 0; k < stairsTop(); k++) { // flight k climbs from floor k to floor k + 1
+    const c = (k + frac) * FLOOR_H;
+    if (c <= reach && c > best) best = c;
+  }
+  const landing = stairsTop() * FLOOR_H; // the top step, right at the opening on the top floor
+  if (frac < 0.03 && landing <= reach && landing > best) best = landing;
+  return best === -Infinity ? 0 : best - f * FLOOR_H;
+}
+
+// Can an NPC walk straight from a to b? Not through walls, furniture or a stairwell, not across the pool
+// (unless swimming) and, for guests, never through a staff-only area.
+const tmpWalk = [];
+function circleHits(x, z, r) {
+  for (const c of collidersNear(x, z, r + 0.05, tmpWalk)) {
+    if (c.who === 'car') continue;
+    const px = Math.max(c.x1, Math.min(x, c.x2)), pz = Math.max(c.z1, Math.min(z, c.z2));
+    if ((x - px) ** 2 + (z - pz) ** 2 < r * r) return true;
+  }
+  return false;
+}
+export function clearWalk(ax, az, bx, bz, opts = {}) {
+  if (floorOf(ax) !== floorOf(bx)) return false;
+  const r = opts.r ?? 0.28;
+  const dx = bx - ax, dz = bz - az;
+  const n = Math.ceil(Math.hypot(dx, dz) / 0.3);
+  for (let i = 1; i < n; i++) {
+    const x = ax + (dx * i) / n, z = az + (dz * i) / n;
+    if (circleHits(x, z, r) || inStairwell(x, z)) return false;
+    if (!opts.swim && inPool(x, z)) return false;
+    if (opts.guest && isStaffArea(x, z)) return false;
+  }
+  return true;
+}
 export function roomAt(x, z) { for (const r of ROOMS) if (inRect(x, z, r)) return r; return null; }
 
 export function zoneAt(x, z) {
@@ -966,8 +1117,54 @@ export function nearestNode(x, z) {
   return best || any;
 }
 
-// A* over the nav graph. Guests ({guest:true}) never cut through staff-only areas unless they
-// are already standing in one (e.g. a snooping guest being walked back out).
+// A* over the nav graph, measured in the real building (a storey's x offset doesn't count). Guests
+// ({guest:true}) never cut through staff-only areas unless they start or end in one (e.g. a snooping
+// guest being walked back out). Floors connect by the elevator (unless it's broken down) and the stairs.
+const LIFT_COST = 6;   // waiting for the elevator, in meters of walking
+const CLIMB_COST = 1.6; // stairs are harder going than a flat hallway
+const QUEUE_COST = 3;  // the check-in line is for queuing, not for walking through
+const worldX = nd => nd.x - floorOf(nd.x) * FLOOR_DX;
+function hop(a, b) {
+  if (floorOf(a.x) !== floorOf(b.x)) return a.lift && b.lift ? LIFT_COST : 0.05;
+  return Math.hypot(a.x - b.x, a.z - b.z) * (b.queue ? QUEUE_COST : a.stair && b.stair ? CLIMB_COST : 1);
+}
+const hopOk = (a, b) => !(FLAGS.elev_out && a.lift && b.lift && floorOf(a.x) !== floorOf(b.x));
+
+function search(starts, ends, gx, gz, allowStaff) {
+  const usable = id => { const nd = NODES[id]; return isActive(nd) && (allowStaff || !nd.staff); };
+  const gwx = gx - floorOf(gx) * FLOOR_DX;
+  const h = nd => Math.hypot(worldX(nd) - gwx, nd.z - gz);
+  const g = new Map(), prev = new Map(), open = new Map(), closed = new Set();
+  for (const s of starts) {
+    if (!NODES[s.id]) continue; // wherever the walker starts, even a staff-only spot
+    if (!g.has(s.id) || s.c < g.get(s.id)) { g.set(s.id, s.c); prev.set(s.id, null); open.set(s.id, s.c + h(NODES[s.id])); }
+  }
+  let best = null, bestCost = Infinity;
+  while (open.size) {
+    let cur = null, bf = Infinity;
+    for (const [id, f] of open) if (f < bf) { bf = f; cur = id; }
+    if (bf >= bestCost) break;
+    open.delete(cur);
+    closed.add(cur);
+    if (ends.has(cur)) {
+      const tot = g.get(cur) + ends.get(cur);
+      if (tot < bestCost) { bestCost = tot; best = cur; }
+    }
+    const cn = NODES[cur];
+    for (const nid of cn.n) {
+      if (closed.has(nid) || !usable(nid)) continue;
+      const nn = NODES[nid];
+      if (!hopOk(cn, nn)) continue;
+      const ng = g.get(cur) + hop(cn, nn);
+      if (!g.has(nid) || ng < g.get(nid)) { g.set(nid, ng); prev.set(nid, cur); open.set(nid, ng + h(nn)); }
+    }
+  }
+  if (best === null) return null;
+  const out = [];
+  for (let c = best; c !== null; c = prev.get(c)) out.push(c);
+  return out.reverse();
+}
+
 const pathCache = new Map();
 export function findPath(from, to, opts = {}) {
   if (from === to) return [from];
@@ -976,35 +1173,71 @@ export function findPath(from, to, opts = {}) {
   const allowStaff = !opts.guest || !!start.staff || !!goal.staff;
   const key = `${from}>${to}|${allowStaff ? 1 : 0}`;
   if (pathCache.has(key)) return pathCache.get(key);
-  const usable = id => { const nd = NODES[id]; return isActive(nd) && (allowStaff || !nd.staff); };
-  const g = { [from]: 0 }, prev = {}, open = new Map([[from, 0]]), closed = new Set();
-  while (open.size) {
-    let cur = null, bf = Infinity;
-    for (const [id, f] of open) if (f < bf) { bf = f; cur = id; }
-    open.delete(cur);
-    if (cur === to) break;
-    closed.add(cur);
-    const cn = NODES[cur];
-    for (const nid of cn.n) {
-      if (closed.has(nid) || !usable(nid)) continue;
-      const nn = NODES[nid];
-      const ng = g[cur] + Math.hypot(nn.x - cn.x, nn.z - cn.z);
-      if (g[nid] === undefined || ng < g[nid]) {
-        g[nid] = ng;
-        prev[nid] = cur;
-        open.set(nid, ng + Math.hypot(nn.x - goal.x, nn.z - goal.z));
-      }
-    }
-  }
-  let result = null;
-  if (g[to] !== undefined) {
-    result = [to];
-    let c = to;
-    while (c !== from) { c = prev[c]; result.push(c); }
-    result.reverse();
-  }
+  const result = search([{ id: from, c: 0 }], new Map([[to, 0]]), goal.x, goal.z, allowStaff);
   pathCache.set(key, result);
   return result;
+}
+
+// Up to `max` nodes near a point that can be walked to in a straight line, nearest first.
+function visibleNodes(x, z, opts, max = 5) {
+  const f = floorOf(x), onStairs = inStairwell(x, z), cand = [];
+  for (const id in NODES) {
+    const nd = NODES[id];
+    if (!isActive(nd) || floorOf(nd.x) !== f || (nd.stair && !onStairs) || (nd.pose === 'swim' && !opts.swim) || (opts.guest && nd.staff)) continue;
+    const d2 = (nd.x - x) ** 2 + (nd.z - z) ** 2;
+    if (d2 < 196) cand.push([d2, id]);
+  }
+  cand.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (let i = 0; i < cand.length && i < 16 && out.length < max; i++) {
+    const nd = NODES[cand[i][1]];
+    if (cand[i][0] < 0.01 || (onStairs ? nd.stair || nd.stairEntry : clearWalk(x, z, nd.x, nd.z, opts))) out.push({ id: cand[i][1], c: Math.sqrt(cand[i][0]) });
+  }
+  if (!out.length) {
+    const id = nearestNode(x, z);
+    if (id) out.push({ id, c: Math.hypot(NODES[id].x - x, NODES[id].z - z) });
+  }
+  return out;
+}
+
+// Plans a walk from (sx, sz) to a node id or a point {x, z}. Starts and ends at whichever visible nodes
+// make the trip shortest, then straightens the route wherever a straight line is clear, never past a
+// stairwell, a floor change or a seat. Returns plain waypoints {x, z, hard, stair}.
+// opts: guest (keep out of staff areas), swim (may cross the pool).
+export function planPath(sx, sz, goal, opts = {}) {
+  const goalNode = typeof goal === 'string' ? NODES[goal] : null;
+  const gx = goalNode ? goalNode.x : goal.x, gz = goalNode ? goalNode.z : goal.z;
+  const wopts = {
+    guest: !!opts.guest && !isStaffArea(sx, sz) && !isStaffArea(gx, gz),
+    swim: !!opts.swim || inPool(sx, sz) || (goalNode ? goalNode.pose === 'swim' : inPool(gx, gz)),
+  };
+  const fin = { x: gx, z: gz, hard: true, stair: !!goalNode?.stair };
+  if (floorOf(sx) === floorOf(gx) && !inStairwell(sx, sz) && clearWalk(sx, sz, gx, gz, wopts)) return [fin];
+  const starts = visibleNodes(sx, sz, wopts);
+  const ends = goalNode ? new Map([[goal, 0]]) : new Map(visibleNodes(gx, gz, wopts).map(e => [e.id, e.c]));
+  const allowStaff = !wopts.guest;
+  const ids = search(starts, ends, gx, gz, allowStaff) || search(starts, ends, gx, gz, true);
+  if (!ids) return [fin];
+  const pts = ids.map(id => NODES[id]);
+  if (!goalNode) pts.push({ x: gx, z: gz });
+  return straighten(sx, sz, pts, wopts);
+}
+
+function straighten(sx, sz, pts, opts) {
+  const n = pts.length;
+  const hard = pts.map((p, i) => !!p.stair || !!p.stairEntry || !!p.pose || (i > 0 && floorOf(pts[i - 1].x) !== floorOf(p.x)) || (i < n - 1 && floorOf(pts[i + 1].x) !== floorOf(p.x)));
+  const out = [];
+  let cx = sx, cz = sz, i = 0;
+  while (i < n) {
+    let end = i;
+    while (end < n - 1 && !hard[end]) end++;
+    let pick = i;
+    if (!inStairwell(cx, cz)) for (let k = end; k > i; k--) if (clearWalk(cx, cz, pts[k].x, pts[k].z, opts)) { pick = k; break; }
+    const p = pts[pick];
+    if ((p.x - cx) ** 2 + (p.z - cz) ** 2 > 0.0025 || pick === n - 1) out.push({ x: p.x, z: p.z, hard: hard[pick] || pick === n - 1, stair: !!p.stair });
+    cx = p.x; cz = p.z; i = pick + 1;
+  }
+  return out;
 }
 
 // Uniform grid over the colliders for fast circle-vs-box queries.

@@ -72,6 +72,41 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
     act({ a: 'station', s: 'ktrash' });
   }
 
+  // Whatever went wrong: first aid, a lost kid, a spare key, a passed-out guest, the elevator, the
+  // vending machine or the raccoon. True if the bot spent its turn on one.
+  function incident() {
+    const list = Object.values(sim.incidents).sort((a, b) => a.t - b.t);
+    for (const inc of list) {
+      const g = sim.guests[inc.g];
+      switch (inc.type) {
+        case 'slip':
+          if (!grabTool('medkit')) continue;
+          go(g.x, g.z); extra += 2; act({ a: 'help', g: g.id });
+          return true;
+        case 'lostkid': case 'drunk':
+          if (inc.type === 'drunk') drop();
+          go(g.x, g.z); extra += 1.5; act({ a: 'help', g: g.id });
+          return true;
+        case 'lockout':
+          if (held()?.t !== 'keycard') { drop(); const st = L.STATIONS.spare_keys; go(st.x, st.z + 0.8); act({ a: 'station', s: 'spare_keys' }); return true; }
+          go(g.x, g.z); act({ a: 'help', g: g.id });
+          return true;
+        case 'elevator': { const st = L.STATIONS.elev_0; go(st.x, st.z + 1.5); extra += 3; act({ a: 'station', s: 'elev_0' }); return true; }
+        case 'vending':
+          if (inc.walking) continue;
+          go(L.STATIONS.vending.x + 0.7, L.STATIONS.vending.z); extra += 1.2; act({ a: 'station', s: 'vending' });
+          return true;
+        case 'raccoon': {
+          const m = sim.monsters[inc.m];
+          if (!m || !grabTool('mop')) continue;
+          go(m.x, m.z); extra += 0.8; act({ a: 'shoo', m: m.id });
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function job() {
     const p0 = pl();
     if (p0.car) { // finish the drive
@@ -112,11 +147,12 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
       act({ a: 'station', s: st.id });
       return;
     }
+    if (incident()) return;
     // Burnt food on a burner is a fire waiting to happen: scrape it off first.
     const burnt = stoves().find(id => { const s = sim.stoves[L.STATIONS[id].idx]; return s && !s.bot && sim.stoveState(s).st === 'b'; });
     if (burnt && !held()) { const st = L.STATIONS[burnt]; go(st.x, st.z + 1); act({ a: 'station', s: burnt }); return; }
     if (held()?.t === 'dishes') { const st = L.STATIONS.sink; go(st.x, st.z + 0.8); act({ a: 'station', s: 'sink' }); return; }
-    if (held()?.t === 'cheese' || held()?.t === 'extinguisher') drop();
+    if (['cheese', 'extinguisher', 'medkit', 'keycard'].includes(held()?.t)) drop();
     // No clean plates means nothing comes off the stove: wash up first.
     if (sim.platesOn() && sim.plates < 2 && sim.sinkPile && mine('sink')) { drop(); const st = L.STATIONS.sink; go(st.x, st.z + 0.8); extra += 2.5; act({ a: 'station', s: 'sink' }); return; }
     const h = held();
@@ -185,7 +221,7 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
     if (lug) { drop(); go(lug.x, lug.z); act({ a: 'pickup', id: lug.id }); return; }
     const urgent = m => (m.t === 'circle' || m.t === 'blood' || m.t === 'clog' ? 1 : 0) + (sim.rooms[m.room]?.st === 'dirty' && sim.queue.length ? 1 : 0);
     const messes = Object.values(sim.messes)
-      .filter(m => mine(`m${m.id}`) && !(m.room && sim.claimedBy(`r${m.room}`)) && !(m.t === 'debris' && sim.lvl('skimmer')))
+      .filter(m => mine(`m${m.id}`) && !(m.room && sim.claimedBy(`r${m.room}`)) && !(m.room && sim.rooms[m.room]?.dnd) && !(m.t === 'debris' && sim.lvl('skimmer')))
       .sort((a, b) => urgent(b) - urgent(a) || dist(a) - dist(b));
     for (const m of messes) {
       const tool = MESSES[m.t].tool;

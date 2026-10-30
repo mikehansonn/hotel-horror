@@ -110,13 +110,35 @@ minimap, and the most urgent job gets a ◆ marker on screen.
     teammate can pick them up from the dining room side.
 - **Cleaning:** mops, the pool net and plungers hang on the SUPPLIES rack in the lobby. Dirty rooms need the bed
   made and the mess cleaned before anyone can check in.
+- **Do Not Disturb:** guests settling into their room usually hang a DO NOT DISTURB card on the door handle, and
+  always do when they go to sleep. A red light glows beside the door, the room shows a red dot on the map and the
+  lobby status board says DND. Walk in on them and they're furious, more so if you wake them; knocking annoys them
+  too. Clean that room once they head out. The sign comes down when they leave or call for housekeeping.
 - **Staff-only areas:** the kitchen, laundry, utility room, staff room, storage and the back of the front desk.
   Guests walk around them, but nosy ones (kids especially) wander in. Walk up and press E to escort them out
   before they burn the food, flip the breaker or open the basement door.
 - **Power:** when the lights die, the breaker is in the Utility Room at the west end of the hallway.
-- **Upstairs:** once you've built more floors, take the elevator at the north end of the lobby hallway. Each floor
-  has a linen closet (towels) and a housekeeping closet (a mop and a plunger). Jobs on other floors show ↑2F or ↑3F
-  instead of a distance.
+- **Upstairs:** once you've built more floors, take the elevator at the north end of the lobby hallway, or the
+  spiral staircases in the corners at either end of the hallway (walk up them: one full turn per floor). Guests,
+  helpers and monsters use the stairs too, whichever way is quicker. Each floor has a linen closet (towels) and a
+  housekeeping closet (a mop and a plunger). Jobs on other floors show ↑2F or ↑3F instead of a distance.
+
+### Things that go wrong
+
+Every minute or two something happens that needs a person, with a timer on the task list. Sort it out in time and
+the guests are grateful; let it run out and it ends up in their review.
+
+| Incident | What to do |
+| --- | --- |
+| 🤕 A kid (or anyone) slips on the wet pool deck | Grab a first aid kit (beside the mops on the lobby's back wall, or by the nets on the pool room's back wall) and hold E on them |
+| 😰 A kid wanders off (the hedge maze, the laundry, the storage room by the basement door...) | Follow the marker, find them, press E to send them back |
+| 🚪 A guest locks themselves out | Take a spare key card from the rack behind the front desk and hand it over |
+| 🥴 An office partier passes out in public | Hold E to get them up and off to bed, or they're sick where they lie |
+| 🛗 The elevator gets stuck | Hold E at the elevator panel on the ground floor; until then everyone takes the stairs |
+| 🦝 A raccoon gets into the kitchen | Hold E on it with a mop to chase it out before it raids the trash and the stove |
+| 🥤 The vending machine eats a guest's money | Hold E on the machine to give it a whack |
+
+A wet pool deck makes slips likelier; the **Non-Slip Pool Deck** upgrade makes them rare.
 
 ### Closing time
 
@@ -129,7 +151,7 @@ bill you for the leftovers.
 
 Between shifts, the Manager's Office has four tabs:
 
-- **Upgrades:** 57 upgrades in seven categories (rooms & expansion, front of house, kitchen, housekeeping,
+- **Upgrades:** 58 upgrades in seven categories (rooms & expansion, front of house, kitchen, housekeeping,
   staff gear, security & the supernatural, business). The kitchen ones include a **Waffle Iron** (waffles go on the
   menu and guests tip for them), a **Dishwasher** that works through the sink pile by itself and a **Fire
   Suppression Hood** that puts stove fires out.
@@ -196,8 +218,14 @@ test/                headless tests and balance bots (npm test)
 Every model, texture and sound is generated in code, so the game ships no asset files.
 
 Upper floors are laid out side by side with the ground floor in the simulation (1000 m apart) and lifted into
-place when drawn, so the simulation stays 2D. `toWorld()` in `layout.js` does the lift; anything crossing floors
-rides the elevator.
+place when drawn, so the simulation stays 2D. `toWorld()` in `layout.js` does the lift. Floors connect by the
+elevator (a short wait, then a jump) and by the spiral stairs: the walkable height in a stairwell comes from
+`surfaceY()`, which picks the helix turn nearest your feet, and halfway up a flight a walker's position switches to
+the next floor's coordinates at the same spot in the building.
+
+NPCs plan routes with `planPath()`: A* over the nav graph between whichever nearby nodes they can actually walk to
+in a straight line, measured in real distances (the check-in line costs extra to walk through), then straightened
+wherever a straight line is clear. While walking they round corners, and step around each other and the crew.
 
 ## Tuning
 

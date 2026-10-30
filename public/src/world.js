@@ -93,6 +93,43 @@ function placeProp(f, parent) {
   return g;
 }
 
+// A soft round glow (for sprites that make a small light visible from far away).
+function glowTexture(color) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, color);
+  grad.addColorStop(0.35, color + '88');
+  grad.addColorStop(1, color + '00');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// A rectangle minus some holes, as a list of rectangles.
+function cutRect(r, holes) {
+  let parts = [{ x1: r.x1, z1: r.z1, x2: r.x2, z2: r.z2 }];
+  for (const h of holes) {
+    const next = [];
+    for (const p of parts) {
+      const x1 = Math.max(p.x1, h.x1), x2 = Math.min(p.x2, h.x2), z1 = Math.max(p.z1, h.z1), z2 = Math.min(p.z2, h.z2);
+      if (x1 >= x2 || z1 >= z2) { next.push(p); continue; }
+      if (p.z1 < z1) next.push({ ...p, z2: z1 });
+      if (z2 < p.z2) next.push({ ...p, z1: z2 });
+      if (p.x1 < x1) next.push({ ...p, x2: x1, z1, z2 });
+      if (x2 < p.x2) next.push({ ...p, x1: x2, z1, z2 });
+    }
+    parts = next;
+  }
+  return parts;
+}
+// The stairwell shafts on storey f, in layout coordinates.
+const stairHoles = f => L.STAIRS.map(s => ({ x1: s.x1 + f * L.FLOOR_DX, x2: s.x2 + f * L.FLOOR_DX, z1: s.z1, z2: s.z2 }));
+const overlaps = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.z1 < b.z2 && a.z2 > b.z1;
+
 const condKey = o => [o.on && `on:${o.on}`, o.off && `off:${o.off}`, o.gate && `gate:${o.gate}`].filter(Boolean).join('|');
 const floorOffset = (obj, f) => obj.position.set(-f * L.FLOOR_DX, f * L.FLOOR_H, 0);
 
@@ -143,7 +180,9 @@ export function buildWorld(scene) {
   const FLOOR_SCALE = { marble: 2.4, wood: 3, checker: 1.6, tile: 1.2, concrete: 4, carpet: 2.6, pooltile: 1.5 };
   for (const z of L.ZONES) {
     if (z.id === 'pool') continue;
-    slab(z.x1, z.z1, z.x2, z.z2, 0, z.floor, FLOOR_SCALE[z.floor], parentFor((z.x1 + z.x2) / 2, { gate: z.wing }));
+    const parent = parentFor((z.x1 + z.x2) / 2, { gate: z.wing });
+    const holes = z.wing ? stairHoles(L.floorOf(z.x1 + 1)) : []; // upstairs, the stairwells come up through the floor
+    for (const r of cutRect(z, holes)) slab(r.x1, r.z1, r.x2, r.z2, 0, z.floor, FLOOR_SCALE[z.floor], parent);
   }
   const P = L.POOL, PZ = L.ZONES.find(z => z.id === 'pool');
   slab(PZ.x1, PZ.z1, PZ.x2, P.z1, 0, 'pooltile', 1.5);
@@ -246,14 +285,25 @@ export function buildWorld(scene) {
 
   // ceilings, roof decks and parapets for every block
   const deck = mat('#3a3633'), parapet = mat('#4a3b35'), eave = mat('#2d1f17');
-  for (const b of L.BLOCKS) {
-    const parent = parentFor((b.x1 + b.x2) / 2, { gate: b.wing });
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(b.x2 - b.x1, b.z2 - b.z1), S('ceiling'));
+  const ceiling = (r, parent) => {
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(r.x2 - r.x1, r.z2 - r.z1), S('ceiling'));
     ceil.rotation.x = Math.PI / 2;
-    ceil.position.set((b.x1 + b.x2) / 2, L.WALL_H - 0.01, (b.z1 + b.z2) / 2);
+    ceil.position.set((r.x1 + r.x2) / 2, L.WALL_H - 0.01, (r.z1 + r.z2) / 2);
     ceil.userData.worldUV = [2.4];
     parent.add(ceil);
-    slabBox(b.x1 - 0.3, b.z1 - 0.3, b.x2 + 0.3, b.z2 + 0.3, L.WALL_H, L.WALL_H + 0.35, deck, null, parent);
+  };
+  for (const b of L.BLOCKS) {
+    const parent = parentFor((b.x1 + b.x2) / 2, { gate: b.wing });
+    // With a storey above, the stairwells go up through this ceiling; until it's built they're capped.
+    const above = L.FLOORS[b.floor + 1];
+    const holes = above ? stairHoles(b.floor) : [];
+    for (const r of cutRect(b, holes)) ceiling(r, parent);
+    for (const r of cutRect({ x1: b.x1 - 0.3, z1: b.z1 - 0.3, x2: b.x2 + 0.3, z2: b.z2 + 0.3 }, holes)) slabBox(r.x1, r.z1, r.x2, r.z2, L.WALL_H, L.WALL_H + 0.35, deck, null, parent);
+    for (const h of holes) {
+      const cap = parentFor(h.x1, { gate: b.wing, off: above.flag });
+      ceiling(h, cap);
+      slabBox(h.x1, h.z1, h.x2, h.z2, L.WALL_H, L.WALL_H + 0.35, deck, null, cap);
+    }
     // a timber band around the outside, between storeys
     for (const [x1, z1, x2, z2] of [[b.x1 - 0.42, b.z1 - 0.42, b.x2 + 0.42, b.z1 - 0.15], [b.x1 - 0.42, b.z2 + 0.15, b.x2 + 0.42, b.z2 + 0.42], [b.x1 - 0.42, b.z1, b.x1 - 0.15, b.z2], [b.x2 + 0.15, b.z1, b.x2 + 0.42, b.z2]]) {
       slabBox(x1, z1, x2, z2, L.WALL_H - 0.12, L.WALL_H + 0.02, eave, null, parent);
@@ -275,8 +325,11 @@ export function buildWorld(scene) {
   for (const z of L.ZONES) {
     if (z.id === 'lobby' || z.id === 'dining' || z.id === 'lounge') continue;
     const lamp = lampFor(z.wing), parent = parentFor((z.x1 + z.x2) / 2, { gate: z.wing });
+    const holes = stairHoles(L.floorOf(z.x1 + 1));
     for (let x = z.x1 + 3; x < z.x2 - 1; x += 6) for (let zz = z.z1 + 2; zz < z.z2 - 1; zz += 6) {
-      slabBox(x - 0.4, zz - 0.4, x + 0.4, zz + 0.4, L.WALL_H - 0.05, L.WALL_H - 0.02, lamp, null, parent);
+      const r = { x1: x - 0.4, z1: zz - 0.4, x2: x + 0.4, z2: zz + 0.4 };
+      if (holes.some(h => overlaps(r, h))) continue;
+      slabBox(r.x1, r.z1, r.x2, r.z2, L.WALL_H - 0.05, L.WALL_H - 0.02, lamp, null, parent);
     }
   }
   for (const r of L.ROOMS) {
@@ -328,6 +381,9 @@ export function buildWorld(scene) {
   // ---------- doors ----------
   const doors = [];
   const doorWood = mat('#4a2c1a'), doorMetal = mat('#6b7378'), presWood = mat('#2a1a10');
+  const dndCard = mat('#b3001b'), dndLit = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff2a2a').multiplyScalar(2.4) });
+  const dndText = labelTexture('DO NOT DISTURB', { color: '#ffffff', bg: '#b3001b', font: 'bold 34px Arial', h: 56 });
+  const dndGlow = new THREE.SpriteMaterial({ map: glowTexture('#ff2a2a'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   const addLeaf = (d, w, x, z, rotY, openDir, plate) => {
     const pivot = new THREE.Group();
     const leafW = w - 0.06;
@@ -346,9 +402,15 @@ export function buildWorld(scene) {
       pm.position.set(leafW / 2, 1.65, 0.045 * side);
       if (side < 0) pm.rotation.y = Math.PI;
       leaf.add(pm);
-      const { texture: t2, aspect: a2 } = labelTexture('DO NOT DISTURB', { color: '#ffffff', bg: '#b3001b', font: 'bold 34px Arial', h: 60 });
-      dnd = new THREE.Mesh(new THREE.PlaneGeometry(0.16 * a2, 0.16), new THREE.MeshBasicMaterial({ map: t2 }));
-      dnd.position.set(leafW - 0.12, 1.25, 0.05 * side);
+      // a DO NOT DISTURB card hanging from the handle on the hallway side
+      dnd = new THREE.Group();
+      box(dnd, 0.13, 0.3, 0.008, dndCard, 0, 0, 0);
+      box(dnd, 0.03, 0.08, 0.01, dndCard, 0, 0.18, 0);
+      const words = new THREE.Mesh(new THREE.PlaneGeometry(0.27, 0.27 / dndText.aspect), new THREE.MeshBasicMaterial({ map: dndText.texture }));
+      words.rotation.z = Math.PI / 2;
+      words.position.z = 0.006;
+      dnd.add(words);
+      dnd.position.set(leafW - 0.12, 0.84, 0.075 * side);
       if (side < 0) dnd.rotation.y = Math.PI;
       dnd.visible = false;
       leaf.add(dnd);
@@ -358,7 +420,25 @@ export function buildWorld(scene) {
     pivot.position.set(x, 0, z);
     pivot.rotation.y = rotY;
     floorDyn[L.floorOf(d.x)].add(pivot);
-    doors.push({ pivot, base: rotY, openDir, x: d.x, z: d.z, open: 0, room: d.room, dnd, wing: d.wing || null });
+    // A little privacy light on the wall beside the door, red while the sign is up: you can see it
+    // from the far end of the hallway.
+    let lamp = null;
+    if (plate) {
+      const off = d.w / 2 + 0.2, f = L.floorOf(d.x);
+      const lx = d.axis === 'x' ? d.x + off : d.x - 0.17, lz = d.axis === 'x' ? d.z - (d.s || 1) * 0.17 : d.z - off;
+      const fixture = new THREE.Group();
+      box(fixture, 0.16, 0.12, 0.1, '#2b2420', 0, 0, 0);
+      lamp = new THREE.Group();
+      lamp.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.11), dndLit));
+      const halo = new THREE.Sprite(dndGlow);
+      halo.scale.set(0.55, 0.55, 1);
+      lamp.add(halo);
+      lamp.visible = false;
+      fixture.add(lamp);
+      fixture.position.set(lx, 2.02, lz); // floorDyn groups take layout coordinates
+      floorDyn[f].add(fixture);
+    }
+    doors.push({ pivot, base: rotY, openDir, x: d.x, z: d.z, open: 0, room: d.room, ri: d.room ? L.ROOMS.findIndex(r => r.id === d.room) : -1, dnd, lamp, wing: d.wing || null });
   };
   for (const d of L.DOORS) {
     const openDir = d.room && d.s ? (d.s > 0 ? -1 : 1) : 1;
@@ -687,7 +767,7 @@ class WorldState {
       d.pivot.visible = (!d.wing || !!L.FLAGS[d.wing]) && (!eye || (eye.x - d.x) ** 2 + (eye.z - d.z) ** 2 < 2500);
       if (!d.pivot.visible) continue;
       let near = false;
-      for (const p of positions) if ((p.x - d.x) ** 2 + (p.z - d.z) ** 2 < 3.2) { near = true; break; }
+      for (const p of positions) if ((p.x - d.x) ** 2 + (p.z - d.z) ** 2 < (p.r2 || 3.2)) { near = true; break; }
       d.open += ((near ? 1 : 0) - d.open) * Math.min(1, dt * 6);
       d.pivot.rotation.y = d.base + d.openDir * d.open * 1.45;
     }
@@ -793,14 +873,18 @@ class WorldState {
       }
       if (thermo) thermo.material = st[3] ? this.coldMat : LIGHTS.screen;
     });
-    for (const d of this.doors) if (d.dnd) { const i = L.ROOMS.findIndex(r => r.id === d.room); d.dnd.visible = !!snap.rm[i]?.[1]; }
+    for (const d of this.doors) if (d.dnd) {
+      const on = !!snap.rm[d.ri]?.[1] && snap.ph === 'shift';
+      d.dnd.visible = on;
+      if (d.lamp) d.lamp.visible = on;
+    }
 
     // status board: every open room, with its tier
     const open = L.ROOMS.map((r, i) => ({ r, i })).filter(({ r }) => !r.wing || L.FLAGS[r.wing]);
-    const key = open.map(({ r, i }) => `${r.id}${snap.rm[i]?.[0]?.[0]}${snap.ht?.t?.[i] || 'b'}`).join(',');
+    const key = open.map(({ r, i }) => `${r.id}${snap.rm[i]?.[0]?.[0]}${snap.ht?.t?.[i] || 'b'}${snap.rm[i]?.[1] ? 'd' : ''}`).join(',');
     if (key !== this.boardKey && this.dyn.board) {
       this.boardKey = key;
-      drawStatusBoard(this.dyn.board.canvas.getContext('2d'), open.map(({ r, i }) => ({ id: r.id, st: snap.rm[i]?.[0] || 'vacant', tier: TIER_CODE[snap.ht?.t?.[i]] || 'basic' })));
+      drawStatusBoard(this.dyn.board.canvas.getContext('2d'), open.map(({ r, i }) => ({ id: r.id, st: snap.rm[i]?.[0] || 'vacant', tier: TIER_CODE[snap.ht?.t?.[i]] || 'basic', dnd: !!snap.rm[i]?.[1] })));
       this.dyn.board.tex.needsUpdate = true;
     }
 
