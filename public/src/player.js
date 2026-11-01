@@ -6,7 +6,6 @@ import { carLength } from './models.js';
 
 const EYE = 1.62;
 const RADIUS = 0.35;
-const STAIR_RADIUS = 0.22; // slimmer on a spiral staircase, so you fit between the pole and the rail
 const tmpV = new THREE.Vector3();
 
 export class Player {
@@ -76,7 +75,7 @@ export class Player {
     this.pitch = -0.05;
   }
 
-  // Halfway up (or down) a spiral staircase you're on the next floor's half of the stairwell.
+  // Halfway up (or down) a flight of stairs you're on the next floor's half of it.
   changeFloor() {
     const f = this.floor;
     if (this.pos.y > L.FLOOR_H / 2 && f < L.stairsTop()) { this.pos.x += L.FLOOR_DX; this.pos.y -= L.FLOOR_H; }
@@ -130,7 +129,7 @@ export class Player {
     this.vel.x += (mx * speed - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (mz * speed - this.vel.z) * Math.min(1, accel * dt);
     const next = { x: this.pos.x + this.vel.x * dt, z: this.pos.z + this.vel.z * dt };
-    L.resolveCircle(next, L.inStairwell(this.pos.x, this.pos.z) ? STAIR_RADIUS : RADIUS, 'player');
+    L.resolveCircle(next, RADIUS, 'player');
     this.pos.x = next.x;
     this.pos.z = next.z;
 

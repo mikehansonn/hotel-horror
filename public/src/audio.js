@@ -126,6 +126,9 @@ export class Sfx {
         for (let i = 0; i < 6; i++) this.hiss(o, { t: i * 0.22, dur: 0.2, vol: 0.06, type: 'bandpass', f: 2500 + Math.random() * 1500, q: 4, a: 0.05 });
         break;
       case 'creak': this.tone(o, { f: 110, f2: 70, type: 'sawtooth', dur: 0.9, vol: 0.06, a: 0.2 }); break;
+      case 'stalk': // slow, heavy footsteps somewhere nearby
+        for (let i = 0; i < 2; i++) { this.hiss(o, { t: i * 0.42, dur: 0.1, vol: 0.16, f: 140 }); this.tone(o, { f: 55, f2: 38, t: i * 0.42, dur: 0.12, vol: 0.12 }); }
+        break;
       case 'laugh': for (let i = 0; i < 4; i++) this.tone(o, { f: 260 - i * 15, f2: 180 - i * 10, type: 'triangle', t: i * 0.22, dur: 0.16, vol: 0.12 }); break;
       case 'scream': {
         const osc = this.tone(o, { f: 650, type: 'sawtooth', dur: 1.3, vol: 0.18, a: 0.05 });

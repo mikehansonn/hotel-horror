@@ -1,7 +1,7 @@
 // Looking at things and doing things: targeting, prompts, press/hold actions, drop and throw.
 import * as THREE from 'three';
 import * as L from './layout.js';
-import { ITEMS, MESSES, DISHES } from './content.js';
+import { ITEMS, MESSES, DISHES, cleanTime } from './content.js';
 import { axisDiff } from './util.js';
 
 const REACH = 2.7;
@@ -50,7 +50,7 @@ export class Interact {
         const built = f === 0 || !!snap?.ht?.f?.[L.FLOORS[f].flag];
         if (!built) { this.sfx.play('bad'); this.hud.toast(`The ${L.FLOORS[f].name.toLowerCase()} hasn't been built yet.`, 'bad'); return true; }
         this.hud.closeElevator();
-        if (L.FLAGS.elev_out) { this.sfx.play('bad'); this.hud.toast('The elevator is stuck. Take the stairs at either end of the hall.', 'bad'); return true; }
+        if (L.FLAGS.elev_out) { this.sfx.play('bad'); this.hud.toast('The elevator is stuck. Take the stairs at the west end of the hall.', 'bad'); return true; }
         if (f !== this.player.floor) { this.hud.fade(); this.sfx.play('elevator'); setTimeout(() => this.player.rideTo(f), 180); }
       } else if (code === 'Escape' || code === 'KeyE') this.hud.closeElevator();
       return true;
@@ -109,7 +109,7 @@ export class Interact {
     if (this.player.car) { this.clear(); this.hud.setPrompt(this.carPrompt(snap)); return; }
     if (this.hud.deskOpen && (!snap.dk || (this.player.pos.x - 6) ** 2 + (this.player.pos.z + 7.6) ** 2 > 9)) this.hud.closeDesk();
     if (this.hud.elevOpen && Math.abs(this.player.pos.z + 26) > 3.5) this.hud.closeElevator();
-    if (this.hud.elevOpen && L.FLAGS.elev_out) { this.hud.closeElevator(); this.hud.toast('The elevator just jammed. Take the stairs at either end of the hall.', 'bad'); }
+    if (this.hud.elevOpen && L.FLAGS.elev_out) { this.hud.closeElevator(); this.hud.toast('The elevator just jammed. Take the stairs at the west end of the hall.', 'bad'); }
     const me = snap.pl.find(p => p.i === ctx.me);
     const held = me?.h || null;
     this.tray = held === 'tray' ? me.hc || [] : null;
@@ -213,11 +213,11 @@ export class Interact {
       if (m.t === 'circle') label += ` (${Math.round((m.ch || 0) * 100)}% charged!)`;
       if (def.tool) {
         if (held !== def.tool) return info(`${def.name}: needs ${TOOL_NAME[def.tool]}`);
-        const dur = def.time * (up.mop && def.tool === 'mop' ? 0.5 : 1);
+        const dur = cleanTime(m.t, up);
         return hold(label, dur, { a: 'clean', id: m.i }, `m${m.i}`, { sfx: def.tool === 'net' ? 'splash' : 'scrub' });
       }
       if (held) return info(`${def.name}: hands must be empty`);
-      return hold(label, def.time, { a: 'clean', id: m.i }, `m${m.i}`, { sfx: m.t === 'bed' ? 'curtain' : 'scrub' });
+      return hold(label, cleanTime(m.t, up), { a: 'clean', id: m.i }, `m${m.i}`, { sfx: m.t === 'bed' ? 'curtain' : 'scrub' });
     }
     if (t.kind === 'critter') {
       if (held !== 'mop') return info('A raccoon! Grab a mop to shoo it out');
@@ -227,7 +227,7 @@ export class Interact {
       const g = t.g;
       const help = { a: 'help', g: g.i };
       switch (g.ic) {
-        case '🤕': return held === 'medkit' ? hold('Patch them up', 2.0, help, `help${g.i}`, { sfx: 'scrub', done: 'chime' }) : info('Hurt! Bring a first aid kit (lobby supplies, or by the pool door)');
+        case '🤕': return held === 'medkit' ? hold('Patch them up', 2.0, help, `help${g.i}`, { sfx: 'scrub', done: 'chime' }) : info('Hurt! Bring a first aid kit (lobby supplies rack, or by the pool nets)');
         case '😢': return press('Take them back to their family', help, 'chime');
         case '🚪': return held === 'keycard' ? press('Hand over the spare key card', help, 'chime') : info('Locked out. Spare key cards hang behind the front desk');
         case '🥴': return held ? info('Passed out. Free your hands to help them up') : hold('Help them up and send them to bed', 1.5, help, `help${g.i}`, { sfx: 'scrub', done: 'chime' });
@@ -251,7 +251,7 @@ export class Interact {
     const st = t.st;
     switch (st.kind) {
       case 'elevator':
-        if (L.FLAGS.elev_out) return st.floor === 0 ? hold('Reset the stuck elevator', 3, { a: 'station', s: st.id }, 'elev_fix', { sfx: 'beep', done: 'elevator' }) : info('Out of order. Take the stairs at either end of the hall (the reset panel is downstairs)');
+        if (L.FLAGS.elev_out) return st.floor === 0 ? hold('Reset the stuck elevator', 3, { a: 'station', s: st.id }, 'elev_fix', { sfx: 'beep', done: 'elevator' }) : info('Out of order. Take the stairs at the west end of the hall (the reset panel is downstairs)');
         return { type: 'elevator', label: 'Call the elevator' };
       case 'vending':
         if (snap.g.some(g => g.ic === '😤')) return hold('Give the vending machine a good whack', 1.2, { a: 'station', s: st.id }, 'vend', { sfx: 'thud', done: 'thud' });
@@ -265,7 +265,7 @@ export class Interact {
         if (trayRoom && DISHES[st.item]) return press(`Add ${st.label.toLowerCase()} to the tray (${tray.length}/3)`, { a: 'station', s: st.id });
         return info(`${st.label} (hands full)`);
       case 'coffee': case 'juice': case 'cocoa': {
-        const dur = st.kind === 'coffee' ? (up.espresso ? 0.4 : 2.0) : st.kind === 'cocoa' ? 1.8 : 1.6;
+        const dur = st.kind === 'coffee' ? (L.FLAGS.espresso ? 0.4 : 2.0) : st.kind === 'cocoa' ? 1.8 : 1.6;
         const what = { coffee: 'Brew coffee', juice: 'Squeeze orange juice', cocoa: 'Ladle out a hot cocoa' }[st.kind];
         if (!held) return hold(what, dur, { a: 'station', s: st.id }, st.id, { sfx: 'sizzle', done: 'ding' });
         if (trayRoom) return hold(`${what} onto the tray (${tray.length}/3)`, dur, { a: 'station', s: st.id }, st.id, { sfx: 'sizzle', done: 'ding' });

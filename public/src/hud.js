@@ -33,14 +33,14 @@ const TIPS = {
   body: 'There is a body. Carry it to the DUMPSTER (outside, west of the entrance) and mop up the blood before a guest sees it.',
   circle: 'Summoning circles! Scrub them with a mop before they finish charging.',
   curtains: 'Vampires burn at sunrise. Close the curtains in their rooms before 6 AM.',
-  monster: 'Something is hunting the staff. Shine your flashlight (F) at it to drive it back, or run.',
+  monster: 'Whatever that was, it hunts anyone it can see. Shine your flashlight (F) at it to drive it back, or get out of its sight and run. Listen for its footsteps.',
   cold: 'The aliens want their rooms FREEZING. Use the thermostat next to the door inside their room.',
   cards: 'Read the check-in cards carefully. Some guests should NOT be let in. Press X to turn them away.',
   tiers: 'Fancy guests want fancy rooms. Pick the room type at the desk (1 Standard · 2 Suite · 3 Presidential). Renovate suites in the Manager\'s Office.',
   snoop: 'A guest wandered into a staff-only area! Walk up to them and press E to escort them out before they cause trouble.',
-  elevator: 'Some jobs are upstairs. Take the elevator behind the lobby (press E at the call button), or the spiral stairs at either end of the hallway.',
+  elevator: 'Some jobs are upstairs. Take the elevator behind the lobby (press E at the call button), or the stairs at the west end of the hallway.',
   dnd: 'A red light by a door means DO NOT DISTURB: the guests are inside. Barge in and they will hate you for it. Clean that room once they head out.',
-  slip: 'Someone slipped by the pool! Grab a first aid kit (lobby supplies rack, or beside the pool door) and hold E on them.',
+  slip: 'Someone slipped by the pool! Grab a first aid kit (beside the mops on the lobby\'s back wall, or by the pool nets) and hold E on them.',
   lostkid: 'A kid is lost! Follow the marker, find them and press E to send them back to their family.',
   lockout: 'A guest is locked out of their room. Take a spare key card from the rack behind the front desk and hand it over.',
   drunk: 'A guest passed out in public. Hold E on them to get them up and off to bed before they make a mess.',
@@ -222,7 +222,7 @@ export class Hud {
       </div>`;
     drawPortrait($('portrait'), dk.k, dk.s, dk.w);
     $('desk-patience').style.width = `${pt * 100}%`;
-    if (checkin && snap.rd >= 4) this.tip('cards');
+    if (checkin && snap.rd >= 2) this.tip('cards');
     if (checkin && wants !== 'basic') this.tip('tiers');
   }
 
@@ -286,9 +286,10 @@ export class Hud {
     if (this.tipT <= 0 && this.tipQueue.length) { this.tipT = 9; $('tip').textContent = this.tipQueue.shift(); $('tip').classList.add('on'); }
     else if (this.tipT <= 0) $('tip').classList.remove('on');
 
-    // fear: monsters nearby speed up the heartbeat and close in the vignette
+    // fear: a monster somebody has seen speeds up the heartbeat and closes in the vignette as it nears
+    // (one nobody has seen yet gives nothing away)
     let fear = 0;
-    for (const m of snap.mn) fear = Math.max(fear, 1 - Math.hypot(m.x - ctx.pos.x, m.z - ctx.pos.z) / 16);
+    for (const m of snap.mn) if (m.sn && L.floorOf(m.x) === L.floorOf(ctx.pos.x)) fear = Math.max(fear, 1 - Math.hypot(m.x - ctx.pos.x, m.z - ctx.pos.z) / 16);
     fear = clamp(fear, 0, 1);
     const left = (this.downUntil - performance.now()) / 1000;
     $('downscreen').classList.toggle('on', left > 0);
@@ -311,6 +312,21 @@ export class Hud {
 
     if (this.overlay === 'office') this.refreshOffice(snap, ctx);
     if (this.overlay && ['results', 'gameover', 'victory'].includes(this.overlay)) this.refreshWaiting(snap, ctx);
+  }
+
+  // The thought that crosses your mind when you see something you shouldn't: a line across the middle
+  // of the screen and a jolt of red at the edges.
+  scare(text) {
+    const el = $('scare');
+    el.textContent = text;
+    el.classList.remove('on');
+    void el.offsetWidth;
+    el.classList.add('on');
+    const p = $('pulse');
+    p.style.setProperty('--fear', '0.95');
+    p.classList.remove('beat');
+    void p.offsetWidth;
+    p.classList.add('beat');
   }
 
   autoTips(snap) {
@@ -474,14 +490,18 @@ export class Hud {
       g.restore();
     }
     if (f === 0) { g.fillStyle = '#2f7f96'; g.fillRect(X(L.POOL.x1), Z(L.POOL.z1), (L.POOL.x2 - L.POOL.x1) * PX, (L.POOL.z2 - L.POOL.z1) * PX); }
-    // spiral staircases (once there's a floor to climb to): a ring with a pole
-    if (L.stairsTop() && f <= L.stairsTop()) for (const s of L.STAIRS) {
+    // the staircase (once there's a floor to climb to): treads, and an arrow up the flight from here
+    // (or, on the top floor, down the one below)
+    if (L.stairsTop() && f <= L.stairsTop()) {
+      const s = L.STAIRS, x1 = X(s.x1 + o), x2 = X(s.x2 + o), z1 = Z(s.z1), z2 = Z(s.z2), zm = (z1 + z2) / 2;
       g.fillStyle = '#4a3226';
-      g.fillRect(X(s.x1 + o), Z(s.z1), (s.x2 - s.x1) * PX, (s.z2 - s.z1) * PX);
-      g.strokeStyle = '#d8c59a'; g.lineWidth = 2;
-      g.beginPath(); g.arc(X(s.cx + o), Z(s.cz), s.r * PX * 0.82, 0, 7); g.stroke();
-      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.beginPath(); g.moveTo(X(s.cx + o), Z(s.cz)); g.lineTo(X(s.cx + o) + Math.cos(a) * s.r * PX * 0.82, Z(s.cz) + Math.sin(a) * s.r * PX * 0.82); g.stroke(); }
-      if (labels) { g.fillStyle = '#f3e6c4'; g.font = 'bold 12px sans-serif'; g.fillText('STAIRS', X(s.cx + o), Z(s.z2) + 9); }
+      g.fillRect(x1, z1, x2 - x1, z2 - z1);
+      g.strokeStyle = 'rgba(216,197,154,0.55)'; g.lineWidth = 1;
+      for (let i = 2; i < s.steps; i += 2) { const x = x2 - ((x2 - x1) * i) / s.steps; g.beginPath(); g.moveTo(x, z1); g.lineTo(x, z2); g.stroke(); }
+      const up = f < L.stairsTop(), tip = up ? x1 + 3 : x2 - 3, tail = up ? x2 - 3 : x1 + 3, head = up ? 5 : -5;
+      g.strokeStyle = '#f3e6c4'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(tail, zm); g.lineTo(tip, zm); g.moveTo(tip + head, zm - 4); g.lineTo(tip, zm); g.lineTo(tip + head, zm + 4); g.stroke();
+      if (labels) { g.fillStyle = '#f3e6c4'; g.font = 'bold 12px sans-serif'; g.fillText(!f ? 'STAIRS UP' : up ? 'STAIRS' : 'STAIRS DOWN', (x1 + x2) / 2, z2 + 9); }
     }
     g.fillStyle = '#c9c2b0';
     for (const w of L.WALLS) if (on((w.x1 + w.x2) / 2)) g.fillRect(X(w.x1), Z(w.z1), Math.max(1, (w.x2 - w.x1) * PX), Math.max(1, (w.z2 - w.z1) * PX));
@@ -668,8 +688,11 @@ export class Hud {
     if (go) go.onclick = () => this.h.act({ a: 'cmd', cmd: 'start' });
   }
 
+  // Build once; Hotel upgrades go up five levels (each named after the perk it brings); Hired Help is
+  // hired, then trained twice.
   officeUpgrades(snap) {
     const chip = (id, label) => `<button class="chip ${this.upCat === id ? 'on' : ''}" data-cat="${id}">${label}</button>`;
+    const pips = (lv, n) => `<span class="pips">${Array.from({ length: n }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>`;
     const cards = UPGRADES.filter(u => this.upCat === 'all' || u.cat === this.upCat).map(u => {
       const lv = snap.up[u.id] || 0;
       if (u.hotelTab) {
@@ -680,11 +703,23 @@ export class Hud {
       const maxed = cost === undefined;
       const locked = u.req && !snap.up[u.req];
       const afford = !maxed && !locked && snap.mo >= cost;
-      const pips = u.cost.length > 1 ? `<span class="pips">${u.cost.map((_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span>` : '';
-      const buy = maxed ? 'OWNED' : locked ? `🔒 ${esc(UPGRADE_BY_ID[u.req].name)}` : `$${cost}`;
-      return `<div class="up ${maxed ? 'maxed' : locked ? 'locked' : afford ? '' : 'poor'}" ${afford ? `data-up="${u.id}"` : ''}>
+      let name = esc(u.name), body, buy;
+      if (u.cat === 'hotel') {
+        name += ` ${pips(lv, u.cost.length)}`;
+        const steps = u.levels.map(([n, d], i) => `<li class="${i < lv ? 'got' : i === lv ? 'ahead' : ''}"><b>${esc(n)}</b>${i === lv ? ` — ${esc(d)}` : ''}</li>`).join('');
+        body = `<div class="up-desc">Every level: ${esc(u.each)}</div><ol class="up-levels">${steps}</ol>`;
+        buy = maxed ? 'MAXED' : `Level ${lv + 1}<br>$${cost}`;
+      } else if (u.helper) {
+        name += ` ${pips(lv, u.cost.length)}<span class="badge">HIRES HELP</span>`;
+        body = `<div class="up-desc">${esc(u.desc)}</div><div class="up-next">${maxed ? 'Fully trained.' : `${lv ? 'Training' : 'Hire'}: ${esc(u.levels[lv])}`}</div>`;
+        buy = maxed ? 'MAXED' : `${lv ? 'Train' : 'Hire'}<br>$${cost}`;
+      } else {
+        body = `<div class="up-desc">${esc(u.desc)}</div>`;
+        buy = maxed ? 'BUILT' : locked ? `🔒 ${esc(UPGRADE_BY_ID[u.req].name)}` : `$${cost}`;
+      }
+      return `<div class="up ${u.cat} ${maxed ? 'maxed' : locked ? 'locked' : afford ? '' : 'poor'}" ${afford ? `data-up="${u.id}"` : ''}>
         <div class="up-ic">${u.icon}</div>
-        <div class="up-body"><div class="up-name">${esc(u.name)} ${pips}${u.helper ? '<span class="badge">HIRES HELP</span>' : ''}</div><div class="up-desc">${esc(u.desc)}</div></div>
+        <div class="up-body"><div class="up-name">${name}</div>${body}</div>
         <div class="up-buy">${buy}</div></div>`;
     }).join('');
     return `<div class="chips">${chip('all', 'All')}${UPGRADE_CATS.map(c => chip(c.id, `${c.icon} ${esc(c.name)}`)).join('')}</div><div class="ups">${cards}</div>`;
@@ -727,7 +762,7 @@ export class Hud {
     const open = L.ROOMS.filter(r => !r.wing || flags[r.wing]).length;
     const suites = tiers.filter(t => t === 's').length;
     return `
-      <div class="hotel-sum"><span><b>${open}</b> rooms open</span><span><b>${suites}</b> suites</span><span>Presidential suite: <b>${flags.pres ? 'open' : 'not built'}</b></span><span class="dim">Build upward: every new storey adds 12 rooms, reached by the elevator and the spiral stairs.</span></div>
+      <div class="hotel-sum"><span><b>${open}</b> rooms open</span><span><b>${suites}</b> suites</span><span>Presidential suite: <b>${flags.pres ? 'open' : 'not built'}</b></span><span class="dim">Build upward: every new storey adds 12 rooms, reached by the elevator and the stairs at the west end of the hall.</span></div>
       <div class="plan floors">${[...L.FLOORS].reverse().map(storey).join('')}</div>
       <div class="legend"><span class="lg basic"></span>Standard ×1 <span class="lg suite"></span>Suite ×${TIERS.suite.price} <span class="lg pres"></span>Presidential ×${TIERS.pres.price} · Click a standard room to renovate it. Fancy guests expect fancy rooms.</div>`;
   }
@@ -757,7 +792,7 @@ export class Hud {
     const team = snap.pl.map(p => `<span class="tm" style="border-color:${PLAYER_COLORS[p.c]}">${esc(p.n)}${p.i === ctx.hostId ? ' ★ host' : ''}</span>`).join('');
     const counts = {};
     for (const h of snap.hp || []) counts[h.k] = (counts[h.k] || 0) + 1;
-    const helpers = Object.entries(counts).map(([k, n]) => `<div class="helper"><span class="hk">${UPGRADE_BY_ID[k]?.icon || '🤖'}</span><b>${esc(HELPERS[k]?.name || k)}${n > 1 ? ` ×${n}` : ''}</b><span>${esc(UPGRADE_BY_ID[k]?.desc || '')}</span></div>`).join('');
+    const helpers = Object.entries(counts).map(([k, n]) => `<div class="helper"><span class="hk">${UPGRADE_BY_ID[k]?.icon || '🤖'}</span><b>${esc(HELPERS[k]?.name || k)}${n > 1 ? ` ×${n}` : ''} <small>level ${snap.up[k] || 1}/3</small></b><span>${esc(UPGRADE_BY_ID[k]?.desc || '')}</span></div>`).join('');
     return `
       <div class="team">Staff on shift: ${team}${ctx.code ? ` <span class="code">Room code: <b>${esc(ctx.code)}</b></span>` : ''}</div>
       <div class="crew-box">More staff means a busier hotel: ${esc(crewSummary(snap.st || {}, Math.max(1, snap.np || 1)))}. Change how much this matters under Difficulty → Crew scaling.</div>

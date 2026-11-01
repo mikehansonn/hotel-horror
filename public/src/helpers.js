@@ -14,8 +14,12 @@ const knockSpot = room => { const n = L.NODES[L.ROOM_BY_ID[room].hall]; return {
 const carSide = c => ({ x: c.x + Math.cos(c.ry) * 1.4, z: c.z - Math.sin(c.ry) * 1.4 });
 
 const SPEED = { roomba: 1.0, skimmer: 0.8, valet: 2.0, bellhop: 1.5, housekeeper: 1.35, chef: 1.0, busboy: 1.3, towelbot: 1.4, electrician: 1.6, guard: 1.45, doorman: 1.3 };
-// How many of each helper an upgrade level buys (anything not listed: one).
-const COUNT = { roomba: [0, 2, 4], bellhop: [0, 1, 2], housekeeper: [0, 1, 2] };
+// How many of each helper each level buys (anything not listed: one).
+const COUNT = { roomba: [0, 2, 3, 4], bellhop: [0, 1, 2, 2], housekeeper: [0, 1, 2, 2] };
+// Training: how much faster each level makes a helper at walking and working. Where a level hires
+// another of them instead, it doesn't speed them up.
+const PACE = { roomba: [1, 1, 1.25, 1.5], bellhop: [1, 1, 1, 1.25], housekeeper: [1, 1, 1, 1.25] };
+const PACE_DEFAULT = [1, 1, 1.25, 1.5];
 // Which way each helper faces while it waits at its post.
 const HOME_RY = { doorman: 0, valet: 0, bellhop: 0, roomba: 0, housekeeper: 0, chef: Math.PI, busboy: Math.PI, towelbot: Math.PI / 2, electrician: Math.PI, guard: Math.PI };
 const ROOMBA_MESS = new Set(['spill', 'mud', 'trash', 'stain', 'vomit', 'slime', 'ecto']);
@@ -49,6 +53,8 @@ export const helperMethods = {
     return c ? c[Math.min(lv, c.length - 1)] : 1;
   },
 
+  helperPace(k) { return (PACE[k] || PACE_DEFAULT)[Math.min(this.lvl(k), 3)]; },
+
   // Called whenever upgrades change: spawn bought helpers at their posts.
   syncHelpers() {
     for (const k of Object.keys(HELPERS)) {
@@ -56,6 +62,7 @@ export const helperMethods = {
       const have = Object.values(this.helpers).filter(h => h.k === k);
       for (let i = have.length; i < want; i++) this.spawnHelper(k, i);
       for (const h of have.slice(want)) this.removeHelper(h);
+      for (const h of Object.values(this.helpers)) if (h.k === k) h.speed = (SPEED[k] || 1.2) * this.helperPace(k);
     }
   },
 
@@ -157,7 +164,7 @@ export const helperMethods = {
       return;
     }
     if (s.wait !== undefined) {
-      if (!s.started) { s.started = true; h.t = s.wait; }
+      if (!s.started) { s.started = true; h.t = s.wait / this.helperPace(h.k); }
       h.anim = s.anim || 'work';
       if (s.face) h.ry = Math.atan2(s.face.x - h.x, s.face.z - h.z);
       h.t -= dt;
@@ -710,7 +717,7 @@ export const helperMethods = {
       p.greeted = true;
       this.say(h, pick(LINES.greet), 3);
       this.emote(g, '🎩', 2);
-      this.adjust(p, 2, 'welcome');
+      this.adjust(p, 1 + this.lvl('doorman'), 'welcome');
       return this.hJob(h, null, 'Greeting guests', [{ wait: 1.6, anim: 'wave', face: g }]);
     }
     return false;

@@ -9,7 +9,7 @@ leave. If the shift's average rating drops below the target, corporate shuts you
 money for upgrades.
 
 Each shift brings a stranger clientele, starting with business travelers and ending with something that walks up
-from the basement.
+from the basement. Nobody will warn you when it's here: you'll hear it before you see it.
 
 ## Running it
 
@@ -119,7 +119,8 @@ minimap, and the most urgent job gets a ◆ marker on screen.
   before they burn the food, flip the breaker or open the basement door.
 - **Power:** when the lights die, the breaker is in the Utility Room at the west end of the hallway.
 - **Upstairs:** once you've built more floors, take the elevator at the north end of the lobby hallway, or the
-  spiral staircases in the corners at either end of the hallway (walk up them: one full turn per floor). Guests,
+  staircase along the hallway's north wall at its west end: a straight flight up to a landing at the end of the hall
+  upstairs, with a banister round the opening (the next flight up starts back at the foot of that opening). Guests,
   helpers and monsters use the stairs too, whichever way is quicker. Each floor has a linen closet (towels) and a
   housekeeping closet (a mop and a plunger). Jobs on other floors show ↑2F or ↑3F instead of a distance.
 
@@ -138,7 +139,8 @@ the guests are grateful; let it run out and it ends up in their review.
 | 🦝 A raccoon gets into the kitchen | Hold E on it with a mop to chase it out before it raids the trash and the stove |
 | 🥤 The vending machine eats a guest's money | Hold E on the machine to give it a whack |
 
-A wet pool deck makes slips likelier; the **Non-Slip Pool Deck** upgrade makes them rare.
+A wet pool deck makes slips likelier. Lockouts, lost kids and the vending machine only go on the list once the guest
+has actually got to their door, wandered off to wherever they went, or fed the machine.
 
 ### Closing time
 
@@ -151,10 +153,23 @@ bill you for the leftovers.
 
 Between shifts, the Manager's Office has four tabs:
 
-- **Upgrades:** 58 upgrades in seven categories (rooms & expansion, front of house, kitchen, housekeeping,
-  staff gear, security & the supernatural, business). The kitchen ones include a **Waffle Iron** (waffles go on the
-  menu and guests tip for them), a **Dishwasher** that works through the sink pile by itself and a **Fire
-  Suppression Hood** that puts stove fires out.
+- **Upgrades:** three kinds, and they don't come cheap, so pick what your crew needs most.
+  - **Build:** the Second and Third Floors, the Presidential Suite and suite renovations.
+  - **Hotel:** seven general upgrades that each go up five levels. Every level improves the whole thing a little
+    and brings the perk it's named after:
+
+    | Upgrade | Every level | Perks, level 1 → 5 |
+    | --- | --- | --- |
+    | 🛎️ Front Desk | guests wait 12% longer, arrive happier | muzak, lobby makeover, express checkout, grand lobby & cookies, self check-in kiosk |
+    | 🛏️ Guest Rooms | happier checkouts, +$6 a stay | luxury bedding, minibars, soundproofing, self-cleaning toilets, automatic curtains |
+    | 🍳 Kitchen | cooks 10% faster, burns 20% slower | serving trays, espresso machine, island cooktop, waffle iron, fire suppression hood |
+    | 🧹 Housekeeping | cleaning 15% faster | extra supplies, laundry chute, pool chlorinator, dishwasher, industrial mop heads |
+    | 👟 Staff Gear | walk 5% faster, more stamina | sneakers, luggage cart wheels, energy drinks, roller skates, marathon training |
+    | 🔦 Security | flashlights 15% stronger | backup generator, security cameras, background checks, garlic & UV lamps, salt lines |
+    | 🎁 Amenities | room rates +4% | snack machines, highway billboard, gift shop, arcade, hot tub |
+
+  - **Hired Help:** hire a robot or a person, then train them twice (faster, and for the Bellhop Bot, Housekeeper
+    and Roomba swarm, more of them).
 - **Hotel:** a floor plan, storey by storey. Build a **Second Floor** and a **Third Floor** on top of the hotel (12
   rooms each, reached by the elevator; the third floor adds the Lounge, where guests warm up by the fire), add the
   **Presidential Suite** at the end of the second floor, and click any standard room to renovate it into a
@@ -162,7 +177,7 @@ Between shifts, the Manager's Office has four tabs:
 - **Difficulty:** the settings above.
 - **Crew:** who's on shift and which helpers you've hired.
 
-Upgrades marked **HIRES HELP** put a visible robot or person in the hotel who does the job themselves: Roomba
+Hired help is a visible robot or person in the hotel who does the job themselves: Roomba
 swarm, Pool Bot, Valet Intern, Bellhop Bot, Housekeeper, Chef Bot, Dish Bot, Towel Bot, Electrician, Night Guard
 and Doorman. The Chef Bot can make cocoa and waffles but not omelettes, and the Dish Bot washes up when there are no
 tables to clear. Walk up to one to see what it's working on; jobs a helper has already taken are tagged 🤖 in the task
@@ -172,10 +187,10 @@ list so the crew can do something else.
 
 | # | Shift | Clientele | Target |
 | --- | --- | --- | --- |
-| 1 | Grand Opening | Regular folks (and an influencer whose review counts double) | ★ 2.75 |
-| 2 | Family Reunion | Big families with sticky kids | ★ 3.00 |
-| 3 | Synergy Inc. Retreat | A work party, plus the CEO | ★ 3.00 |
-| 4 | The Quiet Guest | Regular folks... and one very polite man with a lot of plastic sheeting | ★ 3.25 |
+| 1 | Grand Opening | Regular folks (and an influencer whose review counts double). Was somebody standing at the end of the hall? | ★ 2.75 |
+| 2 | The Quiet Guest | Regular folks... and one very polite man with a lot of plastic sheeting | ★ 3.00 |
+| 3 | Family Reunion | Big families with sticky kids, and something from the basement | ★ 3.00 |
+| 4 | Synergy Inc. Retreat | A work party, plus the CEO, plus whatever is walking the halls | ★ 3.25 |
 | 5 | They Come in Peace | Aliens who want their rooms freezing, plus a government agent | ★ 3.25 |
 | 6 | Midnight Society | Vampires and a "book club" that brought chalk | ★ 3.50 |
 | 7 | Checkout Is Forever | Guests from 1926, guests who look like other guests, and the Night Porter | ★ 3.50 |
@@ -184,9 +199,12 @@ Targets shown are for the Normal preset. After shift 7 you can keep going in end
 
 Some horror tips, if you want them:
 
+- Nothing announces itself. A monster goes on the task list only once one of you has seen it, and blood or a body
+  only once someone has found it (security cameras help). Before that, listen for slow footsteps and watch for
+  the lights stuttering.
+- Monsters hunt whoever they can see. Shine your flashlight at them, or break line of sight and run.
 - Read the check-in cards. Some guests should not be let in, and turning them away is the right call.
 - Guests who see blood or a body flee and leave a 1-star review. The dumpster is outside, west of the entrance.
-- Shine your flashlight at things that hunt you.
 - Close the curtains in vampire rooms before 6 AM.
 
 ## Project layout
@@ -219,9 +237,9 @@ Every model, texture and sound is generated in code, so the game ships no asset 
 
 Upper floors are laid out side by side with the ground floor in the simulation (1000 m apart) and lifted into
 place when drawn, so the simulation stays 2D. `toWorld()` in `layout.js` does the lift. Floors connect by the
-elevator (a short wait, then a jump) and by the spiral stairs: the walkable height in a stairwell comes from
-`surfaceY()`, which picks the helix turn nearest your feet, and halfway up a flight a walker's position switches to
-the next floor's coordinates at the same spot in the building.
+elevator (a short wait, then a jump) and by the staircase: the flights stack in one slot, the walkable height there
+comes from `surfaceY()` (the highest flight within a step of your feet), and halfway up a flight a walker's position
+switches to the next floor's coordinates at the same spot in the building.
 
 NPCs plan routes with `planPath()`: A* over the nav graph between whichever nearby nodes they can actually walk to
 in a straight line, measured in real distances (the check-in line costs extra to walk through), then straightened
@@ -229,10 +247,11 @@ wherever a straight line is clear. While walking they round corners, and step ar
 
 ## Tuning
 
-- Shift lineups, rating targets, guest types, room tiers and upgrade prices are in `public/src/content.js`.
+- Shift lineups, rating targets, guest types, room tiers, upgrade prices and perks are in `public/src/content.js`
+  (what each Hotel upgrade level adds is applied where it's used in `sim.js`, with `cleanTime()` shared).
 - Difficulty presets and the crew-size tables are in `public/src/difficulty.js`.
 - Timers (patience, luggage, requests, breakfast) and complaint caps are at the top of `public/src/sim.js`;
-  helper speeds and counts are at the top of `public/src/helpers.js`.
+  helper speeds, counts and training are at the top of `public/src/helpers.js`.
 - `npm test` checks the navigation graph (including that guests never route through staff areas), difficulty
   settings, expansions and helpers, and plays every shift with bots, including "human-speed" bots that pay
   walking time for every trip. Run it after changing balance numbers to see how the curve moves.

@@ -8,6 +8,14 @@ import { PLAYER_COLORS, ITEMS, HELPERS } from './content.js';
 import { angleLerp } from './util.js';
 
 const NPC_DOOR = 2.1; // squared distance at which a guest, robot or monster opens a door
+// Long-handled tools are held partway up the handle with the head down by the floor (their models stand
+// on the head). GRIP: how far up the handle a hand holds it. POLE (first person): where the hand is, which
+// way the handle runs from the head up to it (camera space) and how far up it the hand is; the mop's head
+// just shows at the bottom of the screen.
+const GRIP = { mop: 0.9, plunger: 0.55 };
+const POLE = { mop: [0.32, -0.32, -0.55, 0.2, 0.63, 0.8, 1.04], plunger: [0.3, -0.28, -0.44, 0.1, 0.46, 0.88, 0.55] };
+const UP = new THREE.Vector3(0, 1, 0);
+const tmpGrip = new THREE.Vector3();
 
 function makeSprite(texture, w, h, depthTest = true) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest, transparent: true }));
@@ -368,7 +376,10 @@ export class View {
           m.visible = true;
           who.mesh.userData.hand.updateWorldMatrix(true, false);
           who.mesh.userData.hand.getWorldPosition(m.position);
-          m.rotation.set(tool ? -0.9 : 0, who.mesh.rotation.y, 0, 'YXZ');
+          if (GRIP[it.t]) {
+            m.rotation.set(-0.4, who.mesh.rotation.y, 0, 'YXZ');
+            m.position.sub(tmpGrip.set(0, GRIP[it.t], 0).applyEuler(m.rotation));
+          } else m.rotation.set(tool ? -0.9 : 0, who.mesh.rotation.y, 0, 'YXZ');
           if (it.t === 'luggage' || it.t === 'body') m.position.y = Math.max(0.05, m.position.y - 0.7);
         } else m.visible = false;
         continue;
@@ -406,13 +417,18 @@ export class View {
           o.material.depthWrite = false;
           o.renderOrder = 20;
         });
-        const P = {
-          mop: [0.34, -0.42, -0.62, -1.15, 0.2], net: [0.34, -0.46, -0.62, -1.25, 0.2], plunger: [0.32, -0.36, -0.55, -1.0, 0.2],
+        let P = {
+          net: [0.34, -0.46, -0.62, -1.25, 0.2],
           luggage: [0.36, -0.95, -0.62, 0, 0.3], body: [0.0, -0.75, -1.05, 0, 1.4], towels: [0.26, -0.36, -0.58, 0.1, 0.2],
           tray: [0.12, -0.36, -0.56, 0.35, 0.1], extinguisher: [0.3, -0.66, -0.62, 0.1, 0.35], dishes: [0.1, -0.52, -0.6, 0.25, 0.1],
         }[me.h] || [0.26, -0.3, -0.52, 0.25, 0.2];
+        const pole = POLE[me.h];
+        if (pole) {
+          const dir = tmpGrip.set(pole[3], pole[4], pole[5]).normalize();
+          it.quaternion.setFromUnitVectors(UP, dir);
+          P = [pole[0] - dir.x * pole[6], pole[1] - dir.y * pole[6], pole[2] - dir.z * pole[6]];
+        } else it.rotation.set(P[3], P[4], 0);
         it.position.set(P[0], P[1], P[2]);
-        it.rotation.set(P[3], P[4], 0);
         it.userData.base = P;
         this.viewModel.add(it);
         this.vmItem = it;
@@ -477,8 +493,12 @@ export class View {
       mesh.rotation.y = angleLerp(mesh.rotation.y, m.r, k);
       if (o.k === 'raccoon') { animateRaccoon(mesh, m.a, this.time); continue; }
       if (mesh.userData.float) mesh.position.y = mw.y + 0.25 + Math.sin(this.time * 2.5) * 0.12;
-      animateCharacter(mesh, m.a === 'stun' ? 'stun' : 'walk', null, this.time * (o.k === 'porter' ? 0.55 : 1));
-      if (o.k === 'porter' && m.a !== 'stun') mesh.userData.rig.head.rotation.z = Math.sin(this.time * 1.3) * 0.25;
+      const still = m.a === 'idle'; // a figure at the end of the hall, just standing there
+      animateCharacter(mesh, m.a === 'stun' ? 'stun' : still ? 'idle' : 'walk', null, this.time * (o.k === 'porter' ? 0.55 : 1));
+      if (o.k === 'porter' && m.a !== 'stun') {
+        mesh.userData.rig.head.rotation.z = Math.sin(this.time * 1.3) * 0.25;
+        if (still) mesh.userData.rig.head.rotation.y = 0; // it doesn't look around; it looks at you
+      }
     }
     for (const [id, o] of this.monsters) if (!seen.has(id)) { this.scene.remove(o.mesh); disposeModel(o.mesh); this.monsters.delete(id); }
   }

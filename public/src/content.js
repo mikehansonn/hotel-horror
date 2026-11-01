@@ -58,7 +58,7 @@ export const TIERS = {
   pres: { name: 'Presidential Suite', short: 'Presidential', price: 4, color: '#e0b04f', icon: '👑' },
 };
 export const TIER_ORDER = ['basic', 'suite', 'pres'];
-export const SUITE_COST = 350;
+export const SUITE_COST = 500;
 // How a guest's mood shifts with the room they get, by their taste.
 export const TASTE_BONUS = {
   budget: { basic: 0, suite: 6, pres: 10 },
@@ -299,7 +299,7 @@ const BAD = {
   lostkid: ['Our daughter got lost for half an hour and the staff didn\'t lift a finger.', 'Lost our kid in a hedge maze. In the snow. At night. Nobody helped.'],
   locked: ['Locked out of my room and nobody could find a spare key.', 'Slept on a lobby sofa because nobody brought me a key.'],
   drunk: ['Woke up on the hallway carpet. Nobody even brought me a pillow.'],
-  elevator: ['The elevator broke and I had to climb the stairs. With my knees.', 'Elevator out of order. Stairs: spiral. Legs: destroyed.'],
+  elevator: ['The elevator broke and I had to climb the stairs. With my knees.', 'Elevator out of order. Thirty-six stairs to my room. Legs: destroyed.'],
   raccoon: ['There was a RACCOON in the dining room.', 'Shared my breakfast with a raccoon. Not by choice.'],
   vending: ['The vending machine ate my money and nobody cared.'],
   pool: ['The pool was a swamp.', 'Something brushed my leg in the pool. It was a sandwich.', 'Pool water had a texture.'],
@@ -450,44 +450,45 @@ export const HELPERS = {
 };
 
 // ---------- shifts ----------
+// Horror starts on the first night (something at the end of a hallway) and gets real from the second.
 export const ROUNDS = [
   {
     title: 'Grand Opening', clientele: 'Regular folks',
     blurb: 'Ski weekends, business trips, a couple of retirees. The road up the mountain closes after dark. What could possibly go wrong?',
-    threshold: 2.75, count: 9, mix: { business: 3, couple: 3, tourist: 2, retiree: 2, influencer: 0.6 }, horror: 0.05,
-    events: [{ h: 24.5, type: 'flicker', d: 2.5 }],
-  },
-  {
-    title: 'Family Reunion', clientele: 'Big families',
-    blurb: 'Sticky mittens, loud voices and forty-one cousins snowed in together. The pool will never be the same.',
-    threshold: 3.0, count: 7, mix: { family: 5, couple: 1, retiree: 2 }, horror: 0.15,
-    events: [{ h: 23.6, type: 'flicker', d: 3 }, { h: 25.8, type: 'blackout' }],
-  },
-  {
-    title: 'Synergy Inc. Retreat', clientele: 'A work party',
-    blurb: 'A corporate retreat in the mountains. Open bar. Closed minds. Someone is definitely throwing up in the hallway.',
-    threshold: 3.0, count: 11, mix: { office: 8, business: 2, couple: 1 }, horror: 0.3,
-    specials: [{ kind: 'boss', h: 17.2 }],
-    events: [{ h: 24.4, type: 'blackout' }, { h: 26.5, type: 'flicker', d: 4 }],
+    threshold: 2.75, count: 9, mix: { business: 3, couple: 3, tourist: 2, retiree: 2, influencer: 0.6 }, horror: 0.3,
+    events: [{ h: 23.4, type: 'flicker', d: 2.5 }, { h: 25.4, type: 'glimpse' }],
   },
   {
     title: 'The Quiet Guest', clientele: 'Regular folks... mostly',
     blurb: 'Someone booked a room and asked for extra plastic sheeting. Read the check-in cards carefully.',
-    threshold: 3.25, count: 10, mix: { business: 3, couple: 3, tourist: 2, retiree: 2, influencer: 1 }, horror: 0.55,
+    threshold: 3.0, count: 10, mix: { business: 3, couple: 3, tourist: 2, retiree: 2, influencer: 1 }, horror: 0.5,
     specials: [{ kind: 'killer', h: 16.6 }],
-    events: [{ h: 22.5, type: 'flicker', d: 3 }, { h: 25.0, type: 'murder' }, { h: 27.4, type: 'blackout' }],
+    events: [{ h: 22.5, type: 'flicker', d: 3 }, { h: 23.6, type: 'glimpse' }, { h: 25.0, type: 'murder' }, { h: 27.4, type: 'blackout' }],
+  },
+  {
+    title: 'Family Reunion', clientele: 'Big families',
+    blurb: 'Sticky mittens, loud voices and forty-one cousins snowed in together. The pool will never be the same. Nobody has been down to the basement in years.',
+    threshold: 3.0, count: 7, mix: { family: 5, couple: 1, retiree: 2 }, horror: 0.6,
+    events: [{ h: 23.6, type: 'flicker', d: 3 }, { h: 24.4, type: 'stalker', until: 26.8 }, { h: 25.8, type: 'blackout' }],
+  },
+  {
+    title: 'Synergy Inc. Retreat', clientele: 'A work party',
+    blurb: 'A corporate retreat in the mountains. Open bar. Closed minds. Someone is definitely throwing up in the hallway, and something is walking it.',
+    threshold: 3.25, count: 11, mix: { office: 8, business: 2, couple: 1 }, horror: 0.65,
+    specials: [{ kind: 'boss', h: 17.2 }],
+    events: [{ h: 23.4, type: 'stalker', until: 27.8 }, { h: 24.4, type: 'blackout' }, { h: 26.5, type: 'flicker', d: 4 }],
   },
   {
     title: 'They Come in Peace', clientele: 'Visitors from "Ohio"',
     blurb: 'A tour group with antennae has booked most of the hotel. It is already ten below outside. They want their rooms colder.',
-    threshold: 3.25, count: 10, mix: { alien: 7, tourist: 2, business: 1 }, horror: 0.6,
+    threshold: 3.25, count: 10, mix: { alien: 7, tourist: 2, business: 1 }, horror: 0.7,
     specials: [{ kind: 'agent', h: 18.4 }],
-    events: [{ h: 23.0, type: 'flicker', d: 3 }, { h: 24.6, type: 'ufo' }, { h: 24.9, type: 'interrogate' }, { h: 27.3, type: 'ufo' }],
+    events: [{ h: 23.0, type: 'flicker', d: 3 }, { h: 24.6, type: 'ufo' }, { h: 24.9, type: 'interrogate' }, { h: 25.6, type: 'stalker', until: 27.6 }, { h: 27.3, type: 'ufo' }],
   },
   {
     title: 'Midnight Society', clientele: 'Vampires & a "book club"',
     blurb: 'Very pale guests who only check in after dark, and a club that brought a lot of chalk. Close the curtains before sunrise.',
-    threshold: 3.5, count: 10, mix: { vampire: 4, cultist: 4, couple: 2 }, horror: 0.8,
+    threshold: 3.5, count: 10, mix: { vampire: 4, cultist: 4, couple: 2 }, horror: 0.85,
     specials: [{ kind: 'priest', h: 19.0 }],
     events: [{ h: 23.5, type: 'circles' }, { h: 25.2, type: 'blackout' }, { h: 26.6, type: 'ritual' }, { h: 28.6, type: 'curtains' }, { h: 30.0, type: 'sunrise' }],
   },
@@ -528,82 +529,128 @@ export function endlessRound(n) {
 }
 
 // ---------- upgrades ----------
+// Build: one-off construction. Hotel: general upgrades with five levels; every level is a step up in
+// what the upgrade does (`each`) and brings the perk it's named after. Hired Help: hire a helper, then
+// train them twice (faster at everything; some get a second pair of hands).
 export const UPGRADE_CATS = [
-  { id: 'rooms', name: 'Rooms & Expansion', icon: '🏨' },
-  { id: 'front', name: 'Front of House', icon: '🛎️' },
-  { id: 'kitchen', name: 'Kitchen', icon: '🍳' },
-  { id: 'clean', name: 'Housekeeping', icon: '🧹' },
-  { id: 'staff', name: 'Staff Gear', icon: '👟' },
-  { id: 'security', name: 'Security & the Supernatural', icon: '🕯️' },
-  { id: 'business', name: 'Business', icon: '💰' },
+  { id: 'build', name: 'Build', icon: '🏗️' },
+  { id: 'hotel', name: 'Hotel', icon: '⭐' },
+  { id: 'help', name: 'Hired Help', icon: '🤖' },
 ];
 
 // helper: true means a visible NPC or robot appears in the hotel and does the job.
 export const UPGRADES = [
-  // rooms & expansion
-  { id: 'floor2', cat: 'rooms', name: 'Second Floor', icon: '🏗️', desc: 'Builds a new storey on top of the hotel: 12 more guest rooms (201–212) and a supply closet, reached by the elevator and two spiral staircases. More rooms means more guests and more money.', cost: [1500] },
-  { id: 'floor3', cat: 'rooms', name: 'Third Floor', icon: '🏗️', desc: 'Another storey: rooms 301–312 and the Lounge, with a roaring fire guests love to sit by.', cost: [1900], req: 'floor2' },
-  { id: 'pres', cat: 'rooms', name: 'Presidential Suite', icon: '👑', desc: 'A palatial suite at the end of the second floor. VIPs pay 4× and adore it.', cost: [1800], req: 'floor2' },
-  { id: 'suites', cat: 'rooms', name: 'Suite Renovations', icon: '🛋️', desc: `Turn standard rooms into suites ($${SUITE_COST} each) from the Hotel tab. Suites pay 1.8×.`, cost: [], hotelTab: true },
-  { id: 'bedding', cat: 'rooms', name: 'Luxury Bedding', icon: '🛏️', desc: 'Every guest checks out happier (+4).', cost: [300] },
-  { id: 'minibar', cat: 'rooms', name: 'Minibars', icon: '🍾', desc: 'Every stay earns +$15 (+$40 in suites).', cost: [350] },
-  { id: 'soundproof', cat: 'rooms', name: 'Soundproofing', icon: '🔇', desc: 'Noise complaints are 70% rarer.', cost: [250] },
-  { id: 'curtains', cat: 'rooms', name: 'Automatic Curtains', icon: '🌅', desc: 'Every curtain closes itself at 5 AM.', cost: [300] },
-  { id: 'toilets', cat: 'rooms', name: 'Self-Cleaning Toilets', icon: '🚽', desc: 'Toilets clog half as often.', cost: [200] },
-  // front of house
-  { id: 'lobby', cat: 'front', name: 'Lobby Makeover', icon: '✨', desc: 'Every guest arrives happier (+7).', cost: [400, 650] },
-  { id: 'muzak', cat: 'front', name: 'Smooth Jazz Muzak', icon: '🎷', desc: 'Guests wait 50% longer and complain half as much.', cost: [260] },
-  { id: 'cookies', cat: 'front', name: 'Welcome Cookies', icon: '🍪', desc: 'Guests get a cookie at check-in (+3).', cost: [180] },
-  { id: 'kiosk', cat: 'front', name: 'Self Check-in Kiosk', icon: '🖥️', desc: 'Guests with reservations walk to a kiosk and check themselves in. It does not read the notes.', cost: [500] },
-  { id: 'express', cat: 'front', name: 'Express Checkout', icon: '🔑', desc: 'A key drop box: checking-out guests skip the desk.', cost: [350] },
-  { id: 'background', cat: 'front', name: 'Background Checks', icon: '🗂️', desc: 'Suspicious guests get a red FLAGGED stamp on their check-in card.', cost: [400] },
-  { id: 'bellhop', cat: 'front', name: 'Bellhop Bot', icon: '🧳', desc: 'A robot carries luggage up to rooms.', cost: [500, 400], helper: true },
-  { id: 'valet', cat: 'front', name: 'Valet Intern', icon: '🅿️', desc: 'An intern parks cars that wait too long, and fetches them at checkout.', cost: [450], helper: true },
-  { id: 'doorman', cat: 'front', name: 'Doorman', icon: '🎩', desc: 'Greets arriving guests (+2) and walks snooping guests out of staff areas.', cost: [400], helper: true },
-  // kitchen
-  { id: 'stove', cat: 'kitchen', name: 'Commercial Range', icon: '🔥', desc: 'Food cooks 40% faster and burns much slower.', cost: [300] },
-  { id: 'stove2', cat: 'kitchen', name: 'Island Cooktop', icon: '🍳', desc: 'Four more burners on the kitchen island.', cost: [400] },
-  { id: 'warmers', cat: 'kitchen', name: 'Heat Lamps', icon: '💡', desc: 'Cooked food takes 2.5× longer to burn.', cost: [250] },
-  { id: 'trays', cat: 'kitchen', name: 'Serving Trays', icon: '🍽️', desc: 'Carry up to 3 dishes at once (always on in the Advanced kitchen).', cost: [250] },
-  { id: 'espresso', cat: 'kitchen', name: 'Espresso Machine', icon: '☕', desc: 'Instant coffee, and guests love it.', cost: [200] },
-  { id: 'waffle', cat: 'kitchen', name: 'Waffle Iron', icon: '🧇', desc: 'Waffles go on the menu for anyone who likes pancakes. Pour batter in the iron. Guests tip well for them.', cost: [300] },
-  { id: 'dishwasher', cat: 'kitchen', name: 'Dishwasher', icon: '🫧', desc: 'Washes the dishes piled in the sink by itself, one tub at a time.', cost: [350] },
-  { id: 'suppress', cat: 'kitchen', name: 'Fire Suppression Hood', icon: '🧯', desc: 'Stove fires put themselves out after a few seconds. Someone still has to mop up the foam.', cost: [250] },
-  { id: 'buffet', cat: 'kitchen', name: 'Breakfast Buffet', icon: '🥐', desc: 'One in three breakfast guests serves themselves from the buffet.', cost: [450] },
-  { id: 'chef', cat: 'kitchen', name: 'Chef Bot', icon: '🤖', desc: 'Cooks and serves simple orders. Slowly. Very slowly.', cost: [700], helper: true },
-  { id: 'busboy', cat: 'kitchen', name: 'Dish Bot', icon: '🍽️', desc: 'Clears dirty tables in the dining room.', cost: [350], helper: true },
-  // housekeeping
-  { id: 'mop', cat: 'clean', name: 'Industrial Mop Heads', icon: '🧽', desc: 'Mop everything twice as fast.', cost: [300] },
-  { id: 'supplies', cat: 'clean', name: 'Extra Supplies', icon: '🪣', desc: 'Two more mops, a pool net and a plunger stashed around the hotel.', cost: [150] },
-  { id: 'chute', cat: 'clean', name: 'Laundry Chute', icon: '🧺', desc: 'A towel cabinet in the main hallway.', cost: [220] },
-  { id: 'chlorine', cat: 'clean', name: 'Pool Chlorinator', icon: '🧪', desc: 'Pool gunk builds up 40% slower.', cost: [200] },
-  { id: 'nonslip', cat: 'clean', name: 'Non-Slip Pool Deck', icon: '🦶', desc: 'Guests slip on the wet pool deck far less often.', cost: [220] },
-  { id: 'roomba', cat: 'clean', name: 'Roomba Swarm', icon: '🧹', desc: 'Little robots roam the lobby and hallways cleaning messes.', cost: [420, 350], helper: true },
-  { id: 'skimmer', cat: 'clean', name: 'Pool Bot', icon: '🏊', desc: 'A robot paddles around skimming the pool.', cost: [350], helper: true },
-  { id: 'housekeeper', cat: 'clean', name: 'Housekeeper', icon: '🧹', desc: 'Cleans dirty rooms and answers housekeeping calls.', cost: [600, 500], helper: true },
-  { id: 'towelbot', cat: 'clean', name: 'Towel Bot', icon: '🧺', desc: 'Delivers towel requests.', cost: [450], helper: true },
-  // staff gear
-  { id: 'sneakers', cat: 'staff', name: 'Squeaky Sneakers', icon: '👟', desc: 'Staff move 15% faster.', cost: [250, 450] },
-  { id: 'skates', cat: 'staff', name: 'Roller Skates', icon: '🛼', desc: 'Sprinting is 25% faster.', cost: [300] },
-  { id: 'energy', cat: 'staff', name: 'Energy Drinks', icon: '🥤', desc: '60% more stamina, faster recovery.', cost: [200] },
-  { id: 'cart', cat: 'staff', name: 'Luggage Cart Wheels', icon: '🛒', desc: 'Suitcases no longer slow you down; guests wait longer for them.', cost: [200] },
-  { id: 'flashlight', cat: 'staff', name: 'Tactical Flashlights', icon: '🔦', desc: 'Brighter flashlights that stun monsters twice as fast.', cost: [250] },
-  // security & the supernatural
-  { id: 'cameras', cat: 'security', name: 'Security Cameras', icon: '📹', desc: 'Monsters, blood and bodies show up on the map.', cost: [300] },
-  { id: 'generator', cat: 'security', name: 'Backup Generator', icon: '⚡', desc: 'Blackouts end by themselves after 15 seconds.', cost: [400] },
-  { id: 'electrician', cat: 'security', name: 'Electrician', icon: '👷', desc: 'Walks to the breaker and fixes blackouts.', cost: [450], helper: true },
-  { id: 'guard', cat: 'security', name: 'Night Guard', icon: '💂', desc: 'Patrols at night, stuns monsters with his flashlight, walks snoops out.', cost: [650], helper: true },
-  { id: 'garlic', cat: 'security', name: 'Garlic Garlands', icon: '🧄', desc: 'Monsters move 30% slower. Vampires grumble.', cost: [350] },
-  { id: 'uv', cat: 'security', name: 'UV Lamps', icon: '🟣', desc: 'Monsters fade 40% sooner and vampires never bite.', cost: [300] },
-  { id: 'holy', cat: 'security', name: 'Holy Water Sprinklers', icon: '💧', desc: 'Summoning circles charge half as fast.', cost: [350] },
-  { id: 'salt', cat: 'security', name: 'Salt Lines', icon: '🧂', desc: 'Monsters cannot enter guest rooms. Hide in one!', cost: [300] },
-  { id: 'tinfoil', cat: 'security', name: 'Tinfoil Lining', icon: '🛸', desc: 'UFO tractor beams bounce off parked cars.', cost: [300] },
-  // business
-  { id: 'billboard', cat: 'business', name: 'Highway Billboard', icon: '🪧', desc: '+20% guests and +10% room rates.', cost: [400] },
-  { id: 'loyalty', cat: 'business', name: 'Loyalty Program', icon: '💳', desc: '+$25 for every review of 4.5★ or better.', cost: [300] },
-  { id: 'giftshop', cat: 'business', name: 'Gift Shop', icon: '🎁', desc: 'Guests browse and buy souvenirs (+$5–20 each).', cost: [500] },
-  { id: 'vending', cat: 'business', name: 'Snack Machines', icon: '🍫', desc: 'Guests buy snacks by the elevators (+$4, +1 happiness).', cost: [150] },
-  { id: 'spa', cat: 'business', name: 'Hot Tub', icon: '♨️', desc: 'Guests soak in the pool hall hot tub (+5).', cost: [600] },
-  { id: 'arcade', cat: 'business', name: 'Arcade Corner', icon: '🕹️', desc: 'Kids play arcade games instead of making messes or snooping.', cost: [350] },
+  // build
+  { id: 'floor2', cat: 'build', name: 'Second Floor', icon: '🏗️', desc: 'Builds a new storey on top of the hotel: 12 more guest rooms (201–212) and a supply closet, reached by the elevator and a staircase at the west end of the hall. More rooms means more guests and more money.', cost: [2400] },
+  { id: 'floor3', cat: 'build', name: 'Third Floor', icon: '🏗️', desc: 'Another storey: rooms 301–312 and the Lounge, with a roaring fire guests love to sit by.', cost: [3400], req: 'floor2' },
+  { id: 'pres', cat: 'build', name: 'Presidential Suite', icon: '👑', desc: 'A palatial suite at the end of the second floor. VIPs pay 4× and adore it.', cost: [2800], req: 'floor2' },
+  { id: 'suites', cat: 'build', name: 'Suite Renovations', icon: '🛋️', desc: `Turn standard rooms into suites ($${SUITE_COST} each) from the Hotel tab. Suites pay 1.8×.`, cost: [], hotelTab: true },
+  // hotel: five levels each
+  {
+    id: 'desk', cat: 'hotel', name: 'Front Desk', icon: '🛎️', each: 'Guests wait 12% longer at the desk and arrive a little happier.',
+    cost: [350, 700, 1200, 1900, 2800],
+    levels: [
+      ['Smooth Jazz Muzak', 'Something soothing for the queue.'],
+      ['Lobby Makeover', 'Rugs, plants and a fresh coat of paint.'],
+      ['Express Checkout', 'A key drop box: checking-out guests skip the desk.'],
+      ['Grand Lobby', 'Chandeliers, and a jar of welcome cookies at the desk.'],
+      ['Self Check-in Kiosk', 'Guests with reservations check themselves in. It does not read the notes.'],
+    ],
+    perks: [[], ['lobby1'], ['express'], ['lobby2', 'cookies'], ['kiosk']],
+  },
+  {
+    id: 'rooms', cat: 'hotel', name: 'Guest Rooms', icon: '🛏️', each: 'Every guest checks out a little happier and pays $6 more.',
+    cost: [300, 650, 1100, 1800, 2700],
+    levels: [
+      ['Luxury Bedding', 'Thick mattresses and far too many pillows.'],
+      ['Minibars', 'Overpriced snacks in every room: +$15 a stay, +$40 in suites.'],
+      ['Soundproofing', 'Noise complaints are 70% rarer.'],
+      ['Self-Cleaning Toilets', 'Toilets clog half as often.'],
+      ['Automatic Curtains', 'Every curtain closes itself at 5 AM. The night folk sleep safe.'],
+    ],
+    perks: [['bedding'], ['minibar'], ['soundproof'], ['toilets'], ['curtains']],
+  },
+  {
+    id: 'cooking', cat: 'hotel', name: 'Kitchen', icon: '🍳', each: 'Food cooks 10% faster and takes 20% longer to burn.',
+    cost: [300, 650, 1100, 1800, 2700],
+    levels: [
+      ['Serving Trays', 'Carry up to 3 dishes at once (always on in the Advanced kitchen).'],
+      ['Espresso Machine', 'Instant coffee, and guests love it.'],
+      ['Island Cooktop', 'Four more burners on the kitchen island.'],
+      ['Waffle Iron', 'Waffles go on the menu for anyone who likes pancakes. Guests tip well for them.'],
+      ['Fire Suppression Hood', 'Stove fires put themselves out after a few seconds, and heat lamps keep cooked food from burning.'],
+    ],
+    perks: [['trays'], ['espresso'], ['stove2'], ['waffle'], ['suppress', 'warmers']],
+  },
+  {
+    id: 'cleaning', cat: 'hotel', name: 'Housekeeping', icon: '🧹', each: 'Mopping, plunging, skimming and making beds go 15% faster.',
+    cost: [250, 550, 950, 1600, 2400],
+    levels: [
+      ['Extra Supplies', 'Two more mops, a pool net and a plunger stashed around the hotel.'],
+      ['Laundry Chute', 'A towel cabinet in the main hallway.'],
+      ['Pool Chlorinator', 'Pool gunk builds up 40% slower.'],
+      ['Dishwasher', 'Washes the dishes piled in the sink by itself, one tub at a time.'],
+      ['Industrial Mop Heads', 'Mopping goes twice as fast.'],
+    ],
+    perks: [['supplies'], ['chute'], ['chlorine'], ['dishwasher'], ['mop']],
+  },
+  {
+    id: 'gear', cat: 'hotel', name: 'Staff Gear', icon: '👟', each: 'Staff walk 5% faster and have more stamina.',
+    cost: [250, 550, 950, 1600, 2400],
+    levels: [
+      ['Squeaky Sneakers', 'Light on your feet. Loud in the hallways.'],
+      ['Luggage Cart Wheels', 'Suitcases no longer slow you down, and guests wait longer for them.'],
+      ['Energy Drinks', 'A fridge full of them in the staff room. Stamina comes back much faster.'],
+      ['Roller Skates', 'Sprinting is 25% faster.'],
+      ['Marathon Training', 'You barely get winded.'],
+    ],
+    perks: [[], ['cart'], ['energy'], ['skates'], []],
+  },
+  {
+    id: 'security', cat: 'hotel', name: 'Security', icon: '🔦', each: 'Flashlights drive monsters back 15% quicker.',
+    cost: [350, 700, 1200, 1900, 2800],
+    levels: [
+      ['Backup Generator', 'Blackouts end by themselves after 20 seconds.'],
+      ['Security Cameras', 'Blood, bodies and anything you\'ve spotted show up on the map.'],
+      ['Background Checks', 'Suspicious guests get a red FLAGGED stamp on their check-in card.'],
+      ['Garlic & UV Lamps', 'Monsters are 30% slower and fade sooner, summoning circles charge slower, and vampires never bite.'],
+      ['Salt Lines', 'Monsters cannot enter guest rooms. Hide in one!'],
+    ],
+    perks: [['generator'], ['cameras'], ['background'], ['garlic', 'uv', 'holy'], ['salt']],
+  },
+  {
+    id: 'amenities', cat: 'hotel', name: 'Amenities', icon: '🎁', each: 'Room rates go up 4%.',
+    cost: [300, 650, 1100, 1800, 2700],
+    levels: [
+      ['Snack Machines', 'Guests buy snacks by the elevators (+$4 each).'],
+      ['Highway Billboard', '20% more guests book a room.'],
+      ['Gift Shop', 'Guests browse and buy souvenirs (+$5–20 each).'],
+      ['Arcade Corner', 'Kids play arcade games instead of making messes or snooping.'],
+      ['Hot Tub', 'Guests soak in the pool hall hot tub (+5 happiness).'],
+    ],
+    perks: [['vending'], ['billboard'], ['giftshop'], ['arcade'], ['spa']],
+  },
+  // hired help: hire, then train twice
+  { id: 'bellhop', cat: 'help', name: 'Bellhop Bot', icon: '🧳', desc: 'A robot carries luggage up to rooms.', cost: [750, 1050, 1500], helper: true, levels: ['One robot.', 'A second robot.', 'Both roll 25% faster.'] },
+  { id: 'valet', cat: 'help', name: 'Valet Intern', icon: '🅿️', desc: 'An intern parks cars that wait too long, and fetches them at checkout.', cost: [650, 900, 1300], helper: true, levels: ['One intern.', 'Faster.', 'Faster still.'] },
+  { id: 'doorman', cat: 'help', name: 'Doorman', icon: '🎩', desc: 'Greets arriving guests and walks snooping guests out of staff areas.', cost: [600, 850, 1250], helper: true, levels: ['A warm welcome (+2).', 'A warmer one (+3), and quicker on his feet.', 'A red-carpet welcome (+4).'] },
+  { id: 'chef', cat: 'help', name: 'Chef Bot', icon: '🤖', desc: 'Cooks and serves simple orders. Slowly. Very slowly.', cost: [1000, 1400, 2000], helper: true, levels: ['Slowly.', 'Less slowly.', 'Almost quickly.'] },
+  { id: 'busboy', cat: 'help', name: 'Dish Bot', icon: '🍽️', desc: 'Clears dirty tables in the dining room.', cost: [550, 800, 1150], helper: true, levels: ['One robot.', 'Faster.', 'Faster still.'] },
+  { id: 'roomba', cat: 'help', name: 'Roomba Swarm', icon: '🧹', desc: 'Little robots roam the lobby and hallways cleaning messes.', cost: [600, 850, 1250], helper: true, levels: ['Two robots.', 'Three robots, and faster.', 'Four robots, and faster still.'] },
+  { id: 'skimmer', cat: 'help', name: 'Pool Bot', icon: '🏊', desc: 'A robot paddles around skimming the pool.', cost: [500, 750, 1100], helper: true, levels: ['One robot.', 'Faster.', 'Faster still.'] },
+  { id: 'housekeeper', cat: 'help', name: 'Housekeeper', icon: '🧹', desc: 'Cleans dirty rooms and answers housekeeping calls.', cost: [900, 1250, 1800], helper: true, levels: ['One housekeeper.', 'A second housekeeper.', 'Both 25% faster.'] },
+  { id: 'towelbot', cat: 'help', name: 'Towel Bot', icon: '🧺', desc: 'Delivers towel requests.', cost: [650, 900, 1300], helper: true, levels: ['One robot.', 'Faster.', 'Faster still.'] },
+  { id: 'electrician', cat: 'help', name: 'Electrician', icon: '👷', desc: 'Walks to the breaker and fixes blackouts.', cost: [650, 900, 1300], helper: true, levels: ['One electrician.', 'Faster.', 'Faster still.'] },
+  { id: 'guard', cat: 'help', name: 'Night Guard', icon: '💂', desc: 'Patrols at night, stuns monsters with his flashlight and walks snoops out.', cost: [950, 1300, 1900], helper: true, levels: ['One guard.', 'Faster.', 'Faster still.'] },
 ];
 export const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map(u => [u.id, u]));
+// The perks that come with levels of the Hotel upgrades: perk → [upgrade id, level].
+export const PERK_OF = {};
+for (const u of UPGRADES) u.perks?.forEach((ks, i) => { for (const k of ks) PERK_OF[k] = [u.id, i + 1]; });
+// Whether a perk is on, given the upgrade levels (sim.upgrades, or snap.up on a client).
+export const hasPerk = (up, k) => !!PERK_OF[k] && (up?.[PERK_OF[k][0]] || 0) >= PERK_OF[k][1];
+// How long a mess takes to clean, with the hotel's Housekeeping level (and its mop heads).
+export function cleanTime(t, up) {
+  const def = MESSES[t];
+  return (def.time / (1 + 0.15 * (up?.cleaning || 0))) * (def.tool === 'mop' && hasPerk(up, 'mop') ? 0.5 : 1);
+}

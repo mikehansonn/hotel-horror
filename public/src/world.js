@@ -126,8 +126,8 @@ function cutRect(r, holes) {
   }
   return parts;
 }
-// The stairwell shafts on storey f, in layout coordinates.
-const stairHoles = f => L.STAIRS.map(s => ({ x1: s.x1 + f * L.FLOOR_DX, x2: s.x2 + f * L.FLOOR_DX, z1: s.z1, z2: s.z2 }));
+// The opening the staircase climbs through on storey f, in layout coordinates.
+const stairHoles = f => [{ x1: L.STAIRS.x1 + f * L.FLOOR_DX, x2: L.STAIRS.x2 + f * L.FLOOR_DX, z1: L.STAIRS.z1, z2: L.STAIRS.z2 }];
 const overlaps = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.z1 < b.z2 && a.z2 > b.z1;
 
 const condKey = o => [o.on && `on:${o.on}`, o.off && `off:${o.off}`, o.gate && `gate:${o.gate}`].filter(Boolean).join('|');
@@ -181,7 +181,7 @@ export function buildWorld(scene) {
   for (const z of L.ZONES) {
     if (z.id === 'pool') continue;
     const parent = parentFor((z.x1 + z.x2) / 2, { gate: z.wing });
-    const holes = z.wing ? stairHoles(L.floorOf(z.x1 + 1)) : []; // upstairs, the stairwells come up through the floor
+    const holes = z.wing ? stairHoles(L.floorOf(z.x1 + 1)) : []; // upstairs, the staircase comes up through the floor
     for (const r of cutRect(z, holes)) slab(r.x1, r.z1, r.x2, r.z2, 0, z.floor, FLOOR_SCALE[z.floor], parent);
   }
   const P = L.POOL, PZ = L.ZONES.find(z => z.id === 'pool');
@@ -294,7 +294,7 @@ export function buildWorld(scene) {
   };
   for (const b of L.BLOCKS) {
     const parent = parentFor((b.x1 + b.x2) / 2, { gate: b.wing });
-    // With a storey above, the stairwells go up through this ceiling; until it's built they're capped.
+    // With a storey above, the staircase goes up through this ceiling; until it's built it's capped.
     const above = L.FLOORS[b.floor + 1];
     const holes = above ? stairHoles(b.floor) : [];
     for (const r of cutRect(b, holes)) ceiling(r, parent);
@@ -721,8 +721,7 @@ class WorldState {
   // merged per storey and a storey is rebuilt when it changes.
   updateDecor(snap) {
     const tiers = snap?.ht?.t;
-    const up = snap?.up || {};
-    const extras = { minibar: !!up.minibar, bedding: !!up.bedding };
+    const extras = { minibar: !!L.FLAGS.minibar, bedding: !!L.FLAGS.bedding };
     const blocks = {};
     L.ROOMS.forEach((r, i) => { if (!r.pres) (blocks[r.wing || 'main'] ||= []).push([r, TIER_CODE[tiers?.[i]] || 'basic']); });
     for (const [name, rooms] of Object.entries(blocks)) {

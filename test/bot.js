@@ -3,7 +3,7 @@
 // action time, which approximates how much one human player can get done in a shift.
 // The bot leaves jobs alone once a helper has claimed them, like a player reading the task list.
 import * as L from '../public/src/layout.js';
-import { ITEMS, MESSES } from '../public/src/content.js';
+import { ITEMS, MESSES, cleanTime } from '../public/src/content.js';
 
 const STOVE_IDS = ['stove0', 'stove1', 'stove2', 'stove3', 'stove4', 'stove5', 'stove6', 'stove7', 'toaster', 'waffle'];
 const DIRECT = { coffee: 'coffee', juice: 'juicer', cocoa: 'cocoa', blood: 'fridge_blood', battery: 'batteries', egg_raw: 'fridge_egg' };
@@ -18,7 +18,7 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
   const act = a => {
     if (a.a === 'clean') {
       const m = sim.messes[a.id];
-      if (m) extra += MESSES[m.t].time * (sim.lvl('mop') && MESSES[m.t].tool === 'mop' ? 0.5 : 1);
+      if (m) extra += cleanTime(m.t, sim.upgrades);
     }
     sim.handleAction(pid, a);
   };

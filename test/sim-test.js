@@ -41,12 +41,12 @@ console.log('\nNav graph');
   L.setFlags({});
   check(!L.findPath('street_e', 'r201_bed') && !L.findPath('street_e', 'r301_bed') && !L.findPath('street_e', 'rPRES_bed'), 'unbuilt floors are unreachable', 'an unbuilt floor is reachable');
   L.setFlags({ floor2: true });
-  check(L.pointBlocked(L.FLOOR_DX + 20, -18.7) && !L.findPath('street_e', 'rPRES_bed'), 'the presidential suite stays sealed until bought', 'presidential barrier missing');
+  check(L.pointBlocked(L.FLOOR_DX + 20, -20) && !L.findPath('street_e', 'rPRES_bed'), 'the presidential suite stays sealed until bought', 'presidential barrier missing');
   L.setFlags({ floor2: true, floor3: true, pres: true });
   for (const r of L.ROOMS) if (!L.findPath('street_e', `r${r.id}_bed`)) fail(`no path to room ${r.id}`);
   for (const s of L.SEATS) if (!L.findPath('street_w', s)) fail(`no path to ${s}`);
   ok('paths exist to every room and seat once everything is open');
-  check(!L.pointBlocked(L.FLOOR_DX + 20, -18.7), 'an opened suite has no barrier', 'barrier still blocks the suite');
+  check(!L.pointBlocked(L.FLOOR_DX + 20, -20), 'an opened suite has no barrier', 'barrier still blocks the suite');
   check(L.findPath('lob_c', 'r305_bed').some(id => id === 'elev@3'), 'guests reach the third floor by elevator', 'no elevator on the way upstairs');
 
   // Guests never route through staff-only rooms on their way somewhere public.
@@ -103,7 +103,7 @@ function runShift(sim, bots, maxSeconds = 1200) {
 }
 
 // The order a sensible group might buy upgrades in.
-const SHOPPING = ['muzak', 'lobby', 'mop', 'cart', 'sneakers', 'roomba', 'stove', 'skimmer', 'valet', 'housekeeper', 'generator', 'kiosk', 'bellhop', 'flashlight', 'cameras', 'floor2', 'garlic', 'espresso', 'electrician'];
+const SHOPPING = ['desk', 'cleaning', 'roomba', 'gear', 'cooking', 'housekeeper', 'security', 'valet', 'floor2', 'bellhop', 'rooms', 'skimmer', 'electrician', 'amenities', 'guard'];
 
 function playGame({ lazy = false, realistic = false, slow = 1, players = 1, rounds = ROUNDS.length, retries = true, shop = true, settings = null }) {
   const events = [];
@@ -236,20 +236,32 @@ function settle(sim, kind, room, nodeKey, st = 'room') {
 }
 try {
   L.setFlags({});
-  const W = L.STAIRS[0];
-  check(!L.inStairwell(W.cx, W.cz + 0.7) && L.surfaceY(W.cx, W.cz + 0.7, 0) === 0, 'no stairwell until there is a second floor');
+  const S = L.STAIRS, lane = (S.z1 + S.z2) / 2;
+  check(!L.inStairwell(S.x2 - 1, lane) && L.surfaceY(S.x2 - 1, lane, 0) === 0, 'no staircase until there is a second floor');
   L.setFlags({ floor2: true, floor3: true });
+  // Walk the flights in small steps, switching floors halfway like the player does.
   let y = 0, f = 0, step = 0;
-  for (let i = 1; i <= 160; i++) { // two turns round the west spiral, in small steps
-    const a = W.exit + (i / 80) * Math.PI * 2;
-    const ny = L.surfaceY(W.cx + Math.cos(a) * 0.7 + f * L.FLOOR_DX, W.cz + Math.sin(a) * 0.7, y);
-    step = Math.max(step, Math.abs(ny - y));
-    y = ny;
-    if (y > L.FLOOR_H / 2) { f++; y -= L.FLOOR_H; }
-  }
-  check(f === 2 && Math.abs(y) < 0.05 && step < 0.2, `two turns of a spiral climb two floors smoothly (largest step ${step.toFixed(2)} m)`, `spiral climb broke: floor ${f}, y ${y.toFixed(2)}, step ${step.toFixed(2)}`);
+  const walk = (from, to) => {
+    const dir = Math.sign(to - from);
+    for (let x = from; dir * (to - x) > 0; x += dir * 0.05) {
+      const ny = L.surfaceY(x + f * L.FLOOR_DX, lane, y);
+      step = Math.max(step, Math.abs(ny - y));
+      y = ny;
+      if (y > L.FLOOR_H / 2) { f++; y -= L.FLOOR_H; } else if (y < -L.FLOOR_H / 2) { f--; y += L.FLOOR_H; }
+    }
+  };
+  walk(S.x2 + 0.3, S.x1 - 0.6);
+  const up1 = f === 1 && Math.abs(y) < 0.01;
+  walk(S.x2 + 0.3, S.x1 - 0.6); // back along the hall upstairs, then the next flight
+  check(up1 && f === 2 && Math.abs(y) < 0.01 && step < 0.25, `two flights climb two floors smoothly (largest step ${step.toFixed(2)} m)`, `climb broke: floor ${f}, y ${y.toFixed(2)}, step ${step.toFixed(2)}`);
+  walk(S.x1 - 0.6, S.x2 + 0.3);
+  check(f === 1 && Math.abs(y) < 0.01 && step < 0.25, 'and walk back down one');
+  L.setFlags({ floor2: true });
+  check(L.pointBlocked(L.FLOOR_DX + S.x2, lane) && !L.pointBlocked(L.FLOOR_DX + S.x1 - 0.5, lane), 'on the top floor a rail closes the far end of the opening, and the landing is open');
+  L.setFlags({ floor2: true, floor3: true });
+  check(!L.pointBlocked(L.FLOOR_DX + S.x2, lane), 'the rail comes off when there is another flight to climb');
   const via = p => (p || []).some(id => id.startsWith('elev@')) ? 'elevator' : (p || []).some(id => id.startsWith('st_')) ? 'stairs' : 'none';
-  check(via(L.findPath('h-26.4', 'r201_bed')) === 'stairs' && via(L.findPath('lob_c', 'r305_bed')) === 'elevator', 'guests take the stairs from the ends of the hall and the elevator from the lobby');
+  check(via(L.findPath('h-26.4', 'r201_bed')) === 'stairs' && via(L.findPath('lob_c', 'r305_bed')) === 'elevator', 'guests take the stairs from the west end of the hall and the elevator from the lobby');
   L.setFlags({ floor2: true, floor3: true, elev_out: true });
   check(via(L.findPath('lob_c', 'r305_bed')) === 'stairs', 'with the elevator stuck, everyone takes the stairs');
   L.setFlags({});
@@ -305,6 +317,8 @@ try {
 
   const lost = settle(sim, 'business', '103', 'lob_c', 'chill');
   sim.startLockout(lost.g);
+  sim.buildTasks();
+  check(!open('lockout') && !sim.tasks.some(t => t.ic === '🚪'), 'nobody is locked out until they get back to their door');
   run(25);
   check(open('lockout') && lost.g.st === 'incident' && sim.iconFor(lost.g) === '🚪', 'a locked-out guest waits outside their door');
   const keys = L.STATIONS.spare_keys;
@@ -313,6 +327,15 @@ try {
   stand(lost.g.x, lost.g.z + 0.5);
   sim.handleAction(1, { a: 'help', g: lost.g.id });
   check(!open('lockout') && !pl.held, 'a spare key card from behind the front desk lets them back in');
+
+  const snack = settle(sim, 'tourist', '106', 'lob_c', 'chill');
+  sim.startVending(snack.g);
+  check(!open('vending'), 'the vending machine only eats money once someone gets to it');
+  run(30);
+  check(open('vending') && snack.g.st === 'incident', 'and then the guest stands there complaining');
+  stand(L.STATIONS.vending.x + 0.9, L.STATIONS.vending.z);
+  sim.handleAction(1, { a: 'station', s: 'vending' });
+  check(!open('vending'), 'a good whack drops the snack');
 
   sim.startElevator();
   check(L.FLAGS.elev_out && !L.findPath('lob_c', 'r205_bed').some(id => id.startsWith('elev@')), 'a stuck elevator sends everyone up the stairs');
@@ -341,11 +364,64 @@ try {
 } catch (e) { fail('incident checks crashed: ' + e.stack); }
 
 // ---------- expansion, suites and helpers ----------
+console.log('\nHorror');
+try {
+  const evs = [];
+  const sim = new Sim({ shiftLen: 480, hostId: 1, send: m => evs.push(m), sendTo: (to, m) => evs.push({ ...m, to }) });
+  sim.addPlayer(1, 'Night Clerk');
+  sim.handleAction(1, { a: 'cmd', cmd: 'start' });
+  sim.schedule = [];
+  sim.incidentT = 1e9;
+  // stand at (x, z) looking toward (tx, tz)
+  const look = (x, z, tx, tz) => sim.setPose(1, { x, y: 0, z, yaw: Math.atan2(-(tx - x), -(tz - z)), pitch: 0 });
+  const tick = (n = 3) => { for (let i = 0; i < n; i++) sim.updateMonsters(0.1); sim.buildTasks(); };
+  look(-6, -20, -16, -20);
+  const m = sim.spawnMonster('porter', 10, -20, 9999);
+  tick();
+  check(!m.seen && !sim.tasks.some(t => t.mon) && !evs.some(e => e.e === 'toast' && e.cl === 'horror'), 'a monster nobody has seen is not announced or listed');
+  look(-6, -20, 10, -20);
+  tick();
+  check(m.seen && sim.tasks.some(t => t.mon) && evs.some(e => e.e === 'sighting' && e.to === 1), 'the moment someone sees it, it goes on the list and they get the scare');
+  delete sim.monsters[m.id];
+
+  const lurker = sim.spawnMonster('porter', -12.5, -26.5, 9999); // inside Room 102, behind the wall
+  look(-9.5, -20, -12.5, -26.5);
+  tick();
+  check(!lurker.seen && !lurker.prey, 'walls hide it, and it can\'t see you either');
+  look(-12.5, -23.5, lurker.x, lurker.z);
+  tick();
+  check(lurker.seen && lurker.prey === 1, 'step into the room and it sees you as you see it');
+  delete sim.monsters[lurker.id];
+
+  const blood = sim.spawnMess('blood', -12.5, -26.8, { room: '102', force: true, evidence: true });
+  look(-9.5, -20, 6, -20);
+  sim.staffSightings();
+  sim.buildTasks();
+  check(!sim.tasks.some(t => t.ic === '🩸'), 'blood behind a closed door goes unnoticed');
+  look(-12.5, -23.5, -12.5, -26.8);
+  sim.staffSightings();
+  sim.buildTasks();
+  check(sim.tasks.some(t => t.ic === '🩸') && evs.some(e => e.e === 'found' && e.to === 1), 'until someone walks in and finds it');
+  delete sim.messes[blood.id];
+
+  look(-14, -20, 14, -20);
+  sim.startGlimpse({});
+  const gl = Object.values(sim.monsters).find(x => x.glimpse);
+  check(gl && !sim.sees(sim.players[1], gl, 40, 0.3), 'a glimpse turns up where nobody is looking');
+  for (let i = 0; i < 5; i++) sim.updateMonsters(0.1);
+  check(gl && sim.monsters[gl.id], 'and waits');
+  const from = [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, 2], [2, -2], [-2, -2]].map(([dx, dz]) => ({ x: gl.x + dx, z: gl.z + dz }))
+    .find(q => !L.pointBlocked(q.x, q.z) && L.clearSight(q.x, q.z, gl.x, gl.z));
+  look(from.x, from.z, gl.x, gl.z);
+  tick(12);
+  check(gl && !sim.monsters[gl.id] && !sim.tasks.some(t => t.mon), 'and is gone a moment after you look at it');
+} catch (e) { fail('horror checks crashed: ' + e.stack); }
+
 console.log('\nExpansion, suites and helpers');
 try {
   const sim = new Sim({ shiftLen: 480, hostId: 1 });
   sim.addPlayer(1, 'Host');
-  sim.money = 50000;
+  sim.money = 500000;
   sim.handleAction(1, { a: 'buy', u: 'floor3' });
   check(!sim.lvl('floor3'), 'the third floor needs the second floor first');
   for (const u of ['floor2', 'floor3', 'pres']) sim.handleAction(1, { a: 'buy', u });
@@ -355,8 +431,15 @@ try {
   for (const room of ['101', '102', '203', 'PRES']) sim.handleAction(1, { a: 'buy', u: 'suites', room });
   check(sim.tierOf('101') === 'suite' && sim.tierOf('203') === 'suite' && sim.tierOf('PRES') === 'pres' && sim.tierOf('103') === 'basic', 'suite renovations change only the chosen rooms');
 
+  for (let i = 0; i < 3; i++) sim.handleAction(1, { a: 'buy', u: 'desk' });
+  check(sim.lvl('desk') === 3 && sim.lvl('express') && !sim.lvl('kiosk') && L.FLAGS.lobby1 && L.FLAGS.express && !L.FLAGS.lobby2, 'hotel upgrades go up a level at a time, each bringing its perk');
+  for (let i = 0; i < 4; i++) sim.handleAction(1, { a: 'buy', u: 'desk' });
+  check(sim.lvl('desk') === 5 && sim.lvl('kiosk') && L.FLAGS.kiosk, 'and stop at level five');
   const helpers = UPGRADES.filter(u => u.helper);
-  for (const u of helpers) for (let i = 0; i < 2; i++) sim.handleAction(1, { a: 'buy', u: u.id });
+  for (const u of helpers) sim.handleAction(1, { a: 'buy', u: u.id });
+  const pace1 = Object.values(sim.helpers).find(h => h.k === 'valet').speed;
+  for (const u of helpers) for (let i = 0; i < 3; i++) sim.handleAction(1, { a: 'buy', u: u.id });
+  check(helpers.every(u => sim.lvl(u.id) === 3) && Object.values(sim.helpers).find(h => h.k === 'valet').speed > pace1 * 1.4, 'hired help trains up twice, getting faster each time');
   const roster = {};
   for (const h of Object.values(sim.helpers)) roster[h.k] = (roster[h.k] || 0) + 1;
   check(helpers.every(u => roster[u.id] >= 1) && roster.roomba === 4, `helpers on staff: ${Object.entries(roster).map(([k, n]) => `${k}×${n}`).join(' ')}`);

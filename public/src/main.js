@@ -13,9 +13,9 @@ import { Player } from './player.js';
 import { Interact } from './interact.js';
 import { Hud, CONTROLS } from './hud.js';
 import { Sfx } from './audio.js';
-import { PLAYER_COLORS } from './content.js';
+import { PLAYER_COLORS, hasPerk } from './content.js';
 import { PRESETS } from './difficulty.js';
-import { rand } from './util.js';
+import { rand, pick } from './util.js';
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -80,7 +80,7 @@ let snap = null;
 let started = false;
 let myName = 'Bellhop';
 let lastDown = 0;
-let poseT = 0, netT = 0;
+let poseT = 0, netT = 0, stutterT = 0;
 let bgTimer = null;
 
 const hud = new Hud({
@@ -127,13 +127,21 @@ function flash(x, z, color, size = 6) {
 }
 
 // ---------- events ----------
+// What goes through your head the first time you see something.
+const SIGHT_LINES = {
+  porter: ['What... is that?', 'That is not a guest.', 'Who let THAT in?', 'Why is it looking at me?'],
+  shade: ['What is that shadow doing?', 'That shadow just moved.', 'Something is wrong with that shadow.'],
+};
+const GLIMPSE_LINES = ['Was somebody standing there?', 'Did you see that?', 'There was someone at the end of the hall...', 'Just the lights playing tricks. Right?'];
 function onEvent(ev) {
   switch (ev.e) {
     case 'toast': hud.toast(ev.tx, ev.cl); if (ev.cl === 'horror') sfx.play('sting'); break;
     case 'snd': { const w = L.toWorld(ev.x, ev.z, 1.2); sfx.play(ev.n, w); break; }
     case 'survey': hud.survey(ev.s); sfx.play(ev.s.stars >= 4 ? 'money' : ev.s.stars <= 2 ? 'bad' : 'click'); break;
     case 'money': if (ev.v >= 5) hud.money(ev.v); break;
-    case 'shift': hud.titleCard(ev); sfx.play(ev.round >= 4 ? 'sting' : 'bell'); break;
+    case 'shift': hud.titleCard(ev); sfx.play('bell'); break;
+    case 'sighting': sfx.play('sting'); hud.scare(pick(ev.glimpse ? GLIMPSE_LINES : SIGHT_LINES[ev.kind] || SIGHT_LINES.porter)); break;
+    case 'found': sfx.play('creak'); hud.scare(ev.what === 'body' ? 'Is that... somebody?' : 'Is that... blood?'); break;
     case 'flicker': world.flicker(ev.d); sfx.play('powerdown', { x: camera.position.x, y: camera.position.y + 1.4, z: camera.position.z }); break;
     case 'fx': flash(ev.x, ev.z, ev.t === 'beam' ? '#7dffb0' : '#bfe8ff'); sfx.play(ev.t === 'beam' ? 'ufo' : 'vanish', { x: ev.x, z: ev.z }); break;
     case 'twins': view.addTwins(ev.x, ev.z); break;
@@ -222,11 +230,11 @@ $('howto').innerHTML = `
   <p><b>Goal:</b> survive seven shifts. Every guest leaves a review when they check out. If a shift's average rating ends below the target, corporate shuts you down. Pass, and you get money for upgrades.</p>
   <p><b>The job:</b> check guests in at the front desk computer (and pick the right kind of room), park their cars, carry their luggage, deliver towels and room service, cook breakfast, clean rooms, mop up messes, skim the pool, fix the power, walk snooping guests out of staff areas, and check guests out. Everything is on the task list at the right; the ◆ marker points at the most urgent job.</p>
   <p><b>Guest rooms:</b> a red light by a door means DO NOT DISTURB: the guests are in. Walk in on them and they'll hate you for it, so clean that room once they've gone out.</p>
-  <p><b>Things go wrong:</b> kids slip by the pool or get lost, guests lock themselves out, the elevator jams, a raccoon gets in. Each one goes on the task list with a timer. First aid kits are on the lobby supplies rack and by the pool; spare key cards are behind the front desk.</p>
+  <p><b>Things go wrong:</b> kids slip by the pool or get lost, guests lock themselves out, the elevator jams, a raccoon gets in. Each one goes on the task list with a timer. First aid kits hang by the lobby supplies rack and by the pool nets; spare key cards are behind the front desk.</p>
   <p><b>The kitchen:</b> cook from the fridge, stir cheese into eggs for omelettes, and get burnt food off the stove before it catches fire (the extinguisher is by the island). Cleared tables give you dirty dishes for the sink, and no clean plates means no breakfast. Plates set on the pass can be picked up from the dining room.</p>
-  <p><b>Between shifts:</b> spend your budget in the Manager's Office. Build new floors on top of the hotel (reached by the elevator or the spiral stairs at either end of the hallway), add a presidential suite, renovate rooms into suites, and hire robots and staff who do jobs for you.</p>
+  <p><b>Between shifts:</b> spend your budget in the Manager's Office. Build new floors on top of the hotel (reached by the elevator or the stairs at the west end of the hallway), add a presidential suite and renovate rooms into suites. The hotel's general upgrades (front desk, rooms, kitchen, housekeeping, staff gear, security, amenities) go up five levels each, and the robots and staff you hire can be trained twice. It all costs real money: choose.</p>
   <p><b>Closing time:</b> a shift only ends once every job on the list is done.</p>
-  <p><b>The night:</b> each shift brings stranger guests. Read the check-in cards. Some guests should never be let in.</p>
+  <p><b>The night:</b> each shift brings stranger guests. Read the check-in cards. Some guests should never be let in. And keep your eyes open: nobody will warn you about what walks these halls after dark. Listen for footsteps, watch the lights, and carry a flashlight (F).</p>
   <div class="controls">${CONTROLS}</div>
   <p>Co-op: one person clicks <b>Host co-op</b> and shares the 4-letter code. Friends on the same network open this page at the host's address (shown in the server window) and click <b>Join</b>. More staff means a busier hotel — the host can tune that under Difficulty.</p>`;
 
@@ -337,11 +345,11 @@ function frame(now) {
     if (!snap.c.some(c => c.i === player.car.id)) player.car = null;
   }
   const up = snap?.up || {};
-  player.speedMul = 1 + 0.15 * (up.sneakers || 0);
-  player.sprintMul = up.skates ? 2.0 : 1.6;
-  player.staminaMul = up.energy ? 1.6 : 1;
-  player.carryMul = me?.h === 'body' ? 0.55 : me?.h === 'luggage' && !up.cart ? 0.85 : 1;
-  player.flashPower = up.flashlight ? 85 : 55;
+  player.speedMul = 1 + 0.05 * (up.gear || 0);
+  player.sprintMul = hasPerk(up, 'skates') ? 2.0 : 1.6;
+  player.staminaMul = 1 + 0.15 * (up.gear || 0) + (hasPerk(up, 'energy') ? 0.4 : 0);
+  player.carryMul = me?.h === 'body' ? 0.55 : me?.h === 'luggage' && !hasPerk(up, 'cart') ? 0.85 : 1;
+  player.flashPower = 55 + 6 * (up.security || 0);
   player.update(dt, {
     block: !!hud.overlay || hud.chatOpen,
     onStep: wet => sfx.play(wet ? 'stepwet' : 'step'),
@@ -371,6 +379,12 @@ function frame(now) {
   };
   view.update(snap, dt, ctx);
   const eye = { x: camera.position.x + player.floor * L.FLOOR_DX, z: camera.position.z };
+  // With something close by that nobody has seen yet, the lights stutter now and then. That's all.
+  stutterT -= dt;
+  if (stutterT <= 0 && snap?.mn?.some(m => !m.sn && m.k !== 'raccoon' && L.floorOf(m.x) === player.floor && (m.x - player.pos.x) ** 2 + (m.z - player.pos.z) ** 2 < 81)) {
+    stutterT = rand(3, 6);
+    world.flicker(rand(0.15, 0.35));
+  }
   world.update(snap, dt, view.doorOpeners(player.pos), eye, camera.position);
   interact.update(dt, snap, { me: net.id, view, down: dn > 0 });
   hud.update(snap, dt, {

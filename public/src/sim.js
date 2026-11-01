@@ -2,8 +2,8 @@
 // Runs only on the host (and in Node tests). Clients render snapshots and send actions.
 import * as L from './layout.js';
 import {
-  ARCH, ITEMS, MESSES, DISHES, REQUESTS, ROUNDS, UPGRADES, UPGRADE_BY_ID, LUGGAGE_COLORS, CAR_COLORS, CAR_NAMES, LINES,
-  TIERS, TASTE_BONUS, SUITE_COST, SNOOP, SNOOP_SPOTS, CHEF_DISHES,
+  ARCH, ITEMS, MESSES, DISHES, REQUESTS, ROUNDS, UPGRADES, UPGRADE_BY_ID, PERK_OF, LUGGAGE_COLORS, CAR_COLORS, CAR_NAMES, LINES,
+  TIERS, TASTE_BONUS, SUITE_COST, SNOOP, SNOOP_SPOTS,
   partyName, makeCard, surveyText, satToStars, endlessRound,
 } from './content.js';
 import { DEFAULT_SETTINGS, sanitizeSettings, difficulty } from './difficulty.js';
@@ -76,12 +76,11 @@ export class Sim {
     this.spawnTools();
   }
 
-  // Mirrors owned upgrades and opened wings into the shared layout flags.
+  // Mirrors owned upgrades, their perks and opened wings into the shared layout flags.
   applyFlags() {
     const f = {};
     for (const u of UPGRADES) if (this.lvl(u.id)) f[u.id] = true;
-    f.lobby1 = this.lvl('lobby') >= 1;
-    f.lobby2 = this.lvl('lobby') >= 2;
+    for (const k in PERK_OF) if (this.lvl(k)) f[k] = true;
     f.trays_ok = this.kitchenMode() === 'advanced' || !!this.lvl('trays');
     f.elev_out = !!this.elevOut;
     L.setFlags(f);
@@ -124,13 +123,14 @@ export class Sim {
     this.washT = 0;
     this.incidents = {};
     this.incidentT = INCIDENT_FIRST;
+    this.spotted = new Set(); // blood and bodies the crew has seen
+    this.foundEvidence = false;
     this.elevOut = false;
     this.autoCurtains = false;
     this.resetHelpers();
     this.roundSurveys = [];
     this.schedule = [];
     this.events = [];
-    this.alerts = [];
     this.ufo = null;
     this.tasks = [];
     this.revenue = 0;
@@ -163,7 +163,12 @@ export class Sim {
   hour() { return START_H + (END_H - START_H) * clamp(this.clock / this.shiftLen, 0, 1); }
   isNight() { const H = this.hour(); return H >= 23 && H < 29.5; }
   isBreakfast() { const H = this.hour(); return H >= 30 && H < 34; }
-  lvl(id) { return this.upgrades[id] || 0; }
+  // An upgrade's level; for a perk that comes with a level of a Hotel upgrade, 1 once it's reached.
+  lvl(id) {
+    const pk = PERK_OF[id];
+    return pk ? ((this.upgrades[pk[0]] || 0) >= pk[1] ? 1 : 0) : this.upgrades[id] || 0;
+  }
+  rateMul() { return 1 + 0.04 * this.lvl('amenities'); }
   id() { return this.nid++; }
 
   // ---------- messaging ----------
@@ -178,9 +183,6 @@ export class Sim {
     this.money += v;
     this.revenue += v;
     this.send({ k: 'ev', e: 'money', v });
-  }
-  alert(ic, tx, pos, secs = 60, secret = false) {
-    this.alerts.push({ ic, tx, x: pos.x, z: pos.z, until: this.clock + secs, secret });
   }
 
   // ---------- players ----------
@@ -284,7 +286,7 @@ export class Sim {
     }
     const avg = this.avgStars();
     const passed = avg >= this.threshold - 1e-9;
-    const bonus = passed ? Math.round(150 + 75 * this.round + 400 * Math.max(0, avg - this.threshold)) : 0;
+    const bonus = passed ? Math.round(150 + 75 * this.round + 300 * Math.max(0, avg - this.threshold)) : 0;
     this.money += bonus;
     const stats = {};
     for (const k in this.stats) stats[k] = this.stats[k] - (this.roundStart?.stats?.[k] || 0);
@@ -368,7 +370,7 @@ export class Sim {
     this.updateMonsters(dt);
     this.updateUfo(dt);
     this.updateAmbience(dt);
-    if (!this.power && this.lvl('generator')) { this.powerT += dt; if (this.powerT > 15) this.restorePower(null); }
+    if (!this.power && this.lvl('generator')) { this.powerT += dt; if (this.powerT > 20) this.restorePower(null); }
     this.slowT -= dt;
     if (this.slowT <= 0) { this.slowT = 0.5; this.slowTick(0.5); }
     this.closingTick(H);
@@ -376,6 +378,7 @@ export class Sim {
 
   slowTick(dt) {
     this.checkSightings();
+    this.staffSightings();
     this.checkLuggage();
     this.spawnGuestMesses(dt);
     this.poolTick(dt);
@@ -383,7 +386,6 @@ export class Sim {
     this.curtainTick();
     this.smokeTick(dt);
     this.incidentTick(dt);
-    this.alerts = this.alerts.filter(a => a.until > this.clock);
     this.buildTasks();
   }
 
@@ -410,7 +412,7 @@ export class Sim {
     const p = {
       id, kind, size, memberKinds: A.members(size), members: [], leader: null, spawned: false,
       room: null, roomWas: null, st: 'arriving', checkedIn: false,
-      sat: clamp(BASE_SAT + 7 * this.lvl('lobby'), 0, 100), comp: {}, praise: {},
+      sat: clamp(BASE_SAT + 2 * this.lvl('desk'), 0, 100), comp: {}, praise: {},
       hasCar: chance(A.car || 0), car: null,
       luggage: randi(A.luggage[0], A.luggage[1]), luggageItems: [], luggageDue: 0, luggagePen: false,
       checkoutH: entry.checkoutH, request: null, nextReq: this.clock + rand(30, 70) / (A.reqRate || 1),
@@ -487,6 +489,7 @@ export class Sim {
   // ends whatever incident they were part of, unless the walk is part of it (opts.incident).
   walkTo(g, target, goal, run = 1, opts = {}) {
     if (g.incident && !opts.incident) this.dropIncident(this.incidents[g.incident]);
+    if (!opts.incident) g.pendingInc = null; // off somewhere else: whatever was about to go wrong won't
     if (!opts.keepSpot) this.releaseSpot(g);
     g.path = L.planPath(g.x, g.z, target, { guest: !opts.free });
     g.goal = goal;
@@ -538,7 +541,6 @@ export class Sim {
       case 'keydrop':
         if (g.t <= 0) { const p = this.parties[g.party]; if (p) { this.vacate(p); this.depart(p); this.sound('ding', g); } }
         break;
-      case 'buffet': if (g.t <= 0) this.walkTo(g, g.spot, 'seatBack', 1, { keepSpot: true }); break;
       case 'shop': case 'spa': case 'arcade':
         if (g.t <= 0) this.finishAmenity(g);
         break;
@@ -587,13 +589,6 @@ export class Sim {
         break;
       case 'kiosk': g.st = 'kiosk'; g.t = 4; this.emote(g, '🖥️', 4); break;
       case 'keydrop': g.st = 'keydrop'; g.t = 1.5; this.emote(g, '🔑', 1.5); break;
-      case 'buffet': g.st = 'buffet'; g.t = 2; break;
-      case 'seatBack':
-        g.st = 'dine';
-        g.eatT = 7;
-        if (this.usePlate()) { if (p) this.adjust(p, 6, 'food'); }
-        else { if (p) this.adjust(p, -6, 'plates'); this.say(g, 'No clean plates at the buffet?!'); }
-        break;
       case 'gift': g.st = 'shop'; g.t = rand(6, 9); break;
       case 'spa': g.st = 'spa'; g.t = rand(15, 25); break;
       case 'arcade': g.st = 'arcade'; g.t = rand(15, 28); break;
@@ -702,9 +697,9 @@ export class Sim {
         break;
       case 'basement':
         if ((ARCH[p?.kind]?.cult || ARCH[p?.kind]?.ghost) && chance(0.6)) {
-          this.spawnMonster('shade', L.BASEMENT.x - 1, L.BASEMENT.z, 50);
-          this.sound('sting', L.BASEMENT);
-          this.toast(null, '🚷 Someone opened the basement door. Something came out.', 'horror');
+          this.spawnMonster('shade', L.BASEMENT.x - 1, L.BASEMENT.z, 50); // and nobody noticed it come out
+          this.sound('creak', L.BASEMENT);
+          this.toast(null, '🚷 A snooping guest wandered into Storage.', 'bad');
         } else { this.spawnMess('trash', g.x, g.z, { force: true }); this.toast(null, '🚷 A snooping guest rummaged through Storage.', 'bad'); }
         break;
       case 'snack':
@@ -804,7 +799,7 @@ export class Sim {
 
   groundY(e) { return L.inPool(e.x, e.z) ? L.POOL.floorY + 0.35 : L.surfaceY(e.x, e.z, e.y || 0); }
 
-  // Floor changes: halfway up a spiral, stepping onto the upper floor's half of the stairwell is
+  // Floor changes: halfway up a flight, stepping onto the upper floor's half of the stairs is
   // instant (the two waypoints are the same spot); anything else waits for the elevator, then steps out
   // on the new floor. Returns true while a ride is under way (the caller skips walking).
   ride(e, path, dt) {
@@ -863,7 +858,7 @@ export class Sim {
     g.qwait = 0;
     g.bellT = 7;
     g.deskT = 0;
-    g.patience = (mode === 'in' ? 85 : 65) * (A.patience || 1) * (this.lvl('muzak') ? 1.5 : 1) * this.slack;
+    g.patience = (mode === 'in' ? 85 : 65) * (A.patience || 1) * (1 + 0.12 * this.lvl('desk')) * this.slack;
     this.queue.push(g.id);
     g.qspot = -1;
     this.reflowQueue();
@@ -900,7 +895,7 @@ export class Sim {
       const p = this.parties[g.party];
       g.qwait += dt;
       g.patience -= dt;
-      if (g.qwait > 22) this.adjust(p, -0.11 * dt * (this.lvl('muzak') ? 0.5 : 1), 'wait');
+      if (g.qwait > 22) this.adjust(p, (-0.11 * dt) / (1 + 0.12 * this.lvl('desk')), 'wait');
       if (g.patience <= 0) {
         this.queueRemove(g);
         this.giveUp(p, g);
@@ -1013,7 +1008,7 @@ export class Sim {
     p.st = 'staying';
     p.checkedIn = true;
     p.checkinClock = this.clock;
-    this.addMoney(Math.round(A.rate * TIERS[tier].price * (this.lvl('billboard') ? 1.1 : 1)));
+    this.addMoney(Math.round(A.rate * TIERS[tier].price * this.rateMul()));
     for (let i = 0; i < p.luggage; i++) {
       const spot = L.LUGGAGE_SPOTS.find(([x, z]) => !Object.values(this.items).some(it => it.t === 'luggage' && !it.holder && (it.x - x) ** 2 + (it.z - z) ** 2 < 0.2));
       const [x, z] = spot || [rand(0.4, 2.4), rand(-6.4, -4.4)];
@@ -1175,7 +1170,7 @@ export class Sim {
 
   finishParty(p, opt = {}) {
     if (p.surveyed) return;
-    if (this.lvl('bedding') && p.checkedIn && !opt.reason) this.adjust(p, 4, 'room');
+    if (this.lvl('rooms') && p.checkedIn && !opt.reason) { this.adjust(p, 2 * this.lvl('rooms'), 'room'); this.addMoney(6 * this.lvl('rooms')); }
     p.surveyed = true;
     let stars = opt.stars ?? satToStars(p.sat);
     if (p.kind === 'killer') stars = this.evidenceLeft() ? 3 : 5;
@@ -1183,7 +1178,7 @@ export class Sim {
     const s = { name: p.name, kind: p.kind, stars, text, room: p.roomWas, tier: p.tier, w: ARCH[p.kind].reviewWeight || 1 };
     this.roundSurveys.push(s);
     this.send({ k: 'ev', e: 'survey', s });
-    if (stars >= 4.5) { this.addMoney(20); if (this.lvl('loyalty')) this.addMoney(25); }
+    if (stars >= 4.5) this.addMoney(20);
   }
 
   // ---------- requests ----------
@@ -1239,7 +1234,6 @@ export class Sim {
     this.say(g, 'OW! Did you just BITE me?!', 4);
     this.spawnMess('stain', g.x + 0.3, g.z, { force: true });
     this.sound('scream', g);
-    this.toast(null, '🧛 A hungry vampire bit one of the guests!', 'horror');
   }
 
   fulfill(p, pl) {
@@ -1439,8 +1433,7 @@ export class Sim {
       if (m.charge >= 1) {
         delete this.messes[m.id];
         this.spawnMonster('shade', m.x, m.z, 60);
-        this.sound('sting', m);
-        this.toast(null, '⛧ A summoning circle finished... something is loose in the hotel!', 'horror');
+        this.sound('whisper', m);
         for (const p of Object.values(this.parties)) if (p.kind === 'cultist' && p.st === 'staying') this.adjust(p, 8, 'ritual');
       }
     }
@@ -1494,6 +1487,19 @@ export class Sim {
     }
   }
 
+  // What the crew has noticed: blood and bodies go on the task list once somebody has seen them, and the
+  // first find of the night gets a moment of its own.
+  staffSightings() {
+    const crew = Object.values(this.players);
+    for (const e of [...Object.values(this.messes), ...Object.values(this.items)]) {
+      if ((e.t !== 'blood' && e.t !== 'body') || this.spotted.has(e.id)) continue;
+      const pl = e.holder > 0 ? this.players[e.holder] : crew.find(c => this.sees(c, e, 14, 0.6));
+      if (!pl) continue;
+      this.spotted.add(e.id);
+      if (!this.foundEvidence) { this.foundEvidence = true; this.sendTo(pl.id, { k: 'ev', e: 'found', what: e.t }); }
+    }
+  }
+
   reactToMess(p, g, m, zn) {
     const A = ARCH[p.kind];
     switch (m.t) {
@@ -1539,7 +1545,7 @@ export class Sim {
       this.emote(m, '😱', 99);
       this.walkTo(m, pick(L.EXITS), 'exit', 2.6);
     }
-    this.toast(null, `😱 ${p.name} saw something horrible and fled the hotel!`, 'horror');
+    this.toast(null, `😱 ${p.name} saw something horrible and fled the hotel!`, 'bad');
   }
 
   roomTick(dt) {
@@ -1653,11 +1659,7 @@ export class Sim {
       if (g.t <= 0) {
         const A = ARCH[p.kind];
         const dishes = this.orderDishes(p);
-        if (this.lvl('buffet') && chance(0.33) && dishes.every(d => CHEF_DISHES.has(d))) {
-          this.walkTo(g, 'buffet_spot', 'buffet', 1, { keepSpot: true });
-          return;
-        }
-        const t = ORDER_TIME * (A.patience || 1) * (this.lvl('muzak') ? 1.25 : 1) * this.slack * (dishes.length > 1 ? 1.25 : 1);
+        const t = ORDER_TIME * (A.patience || 1) * (1 + 0.05 * this.lvl('desk')) * this.slack * (dishes.length > 1 ? 1.25 : 1);
         this.orders[g.id] = { dishes, got: dishes.map(() => false), t, max: t, table: L.NODES[g.spot]?.table ?? 0 };
       }
       return;
@@ -1922,8 +1924,8 @@ export class Sim {
   stoveTimes(slot = 0) {
     const mode = this.kitchenMode();
     const base = { simple: 3, normal: 7, advanced: 8 }[mode] || 7;
-    const cook = base * (slot === 8 ? 0.65 : slot === 9 ? 0.8 : 1) * (this.lvl('stove') ? 0.6 : 1);
-    const window = ({ simple: Infinity, normal: 9, advanced: 6 }[mode] || 9) * (this.lvl('stove') ? 1.8 : 1) * (this.lvl('warmers') ? 2.5 : 1);
+    const cook = (base * (slot === 8 ? 0.65 : slot === 9 ? 0.8 : 1)) / (1 + 0.1 * this.lvl('cooking'));
+    const window = ({ simple: Infinity, normal: 9, advanced: 6 }[mode] || 9) * (1 + 0.2 * this.lvl('cooking')) * (this.lvl('warmers') ? 1.5 : 1);
     return { cook, burn: cook + window };
   }
 
@@ -1977,7 +1979,7 @@ export class Sim {
         if (this.elevOut && st.floor === 0) this.fixElevator(pl);
         break;
       case 'vending': {
-        const inc = Object.values(this.incidents).find(i => i.type === 'vending' && !i.walking);
+        const inc = Object.values(this.incidents).find(i => i.type === 'vending');
         if (inc) this.fixVending(inc, pl);
         break;
       }
@@ -2175,11 +2177,11 @@ export class Sim {
         if (Object.values(this.parties).some(p => p.kind === 'vampire' && p.st === 'staying')) this.toast(null, '🌅 Sunrise soon. Close the curtains in the vampire rooms!', 'horror');
         break;
       case 'sunrise': this.sunrise(); break;
-      case 'stalker':
+      case 'stalker': // the basement door creaks open; nobody is told
         this.spawnMonster('porter', L.BASEMENT.x, L.BASEMENT.z, 9999, ev.until);
-        this.sound('sting', L.BASEMENT);
-        this.toast(null, '🚪 The basement door is open. Something is walking the halls.', 'horror');
+        this.sound('creak', L.BASEMENT);
         break;
+      case 'glimpse': this.startGlimpse(ev); break;
       case 'replace': this.startReplace(); break;
     }
   }
@@ -2234,7 +2236,6 @@ export class Sim {
     this.kill(v, r);
     kp.busy = false;
     this.goRoom(k, 'bed');
-    this.alert('🔪', `Someone screamed in Room ${r.id}...`, r.door, 90);
   }
 
   // Removes a guest violently and leaves evidence behind.
@@ -2306,8 +2307,7 @@ export class Sim {
     this.blackout();
     this.spawnMonster('shade', g.x, g.z + 1, 75);
     for (let i = 0; i < 3; i++) this.spawnMess('circle', g.x + rand(-3, 3), -20 + rand(-1.2, 1.2), { charge: 0.5, force: true });
-    this.sound('sting', g);
-    this.toast(null, '🔥 The High Priest completed a ritual in the hallway!', 'horror');
+    this.sound('whisper', g);
     g.special = false;
     this.parties[g.party].busy = false;
     this.goRoom(g, 'bed');
@@ -2363,7 +2363,6 @@ export class Sim {
     const vg = vp && this.guests[vp.leader];
     if (vp && vg && vp.st === 'staying' && vp.room) {
       this.kill(vg, L.ROOM_BY_ID[vp.room], false);
-      this.alert('👥', `Something happened in Room ${vp.roomWas}...`, L.ROOM_BY_ID[vp.roomWas].door, 90);
     }
     this.goRoom(g, 'bed');
   }
@@ -2390,7 +2389,7 @@ export class Sim {
   incidentOptions() {
     const out = [];
     const busy = type => Object.values(this.incidents).some(i => i.type === type);
-    const free = g => g && !g.hidden && !g.incident && !g.special && !g.snoop && this.parties[g.party]?.st === 'staying';
+    const free = g => g && !g.hidden && !g.incident && !g.pendingInc && !g.special && !g.snoop && this.parties[g.party]?.st === 'staying';
     const H = this.hour();
     const guests = Object.values(this.guests).filter(free);
     const onDeck = g => L.zoneAt(g.x, g.z).id === 'pool' && !L.inPool(g.x, g.z);
@@ -2398,7 +2397,7 @@ export class Sim {
       const deck = guests.filter(g => onDeck(g) && (g.path.length || g.st === 'lounge'));
       const kids = deck.filter(g => g.kind === 'kid');
       const wet = Object.values(this.messes).filter(m => m.t === 'spill' && L.zoneAt(m.x, m.z).id === 'pool').length;
-      if (deck.length) out.push({ type: 'slip', w: (1 + wet * 0.6 + kids.length * 0.5) * (this.lvl('nonslip') ? 0.3 : 1), start: () => this.startSlip(pick(kids.length ? kids : deck)) });
+      if (deck.length) out.push({ type: 'slip', w: 1 + wet * 0.6 + kids.length * 0.5, start: () => this.startSlip(pick(kids.length ? kids : deck)) });
     }
     if (!busy('lostkid') && H < 23) {
       const kids = guests.filter(g => g.kind === 'kid' && !g.path.length && !this.orders[g.id] && g.eatT <= 0 && ['room', 'chill', 'lounge', 'swim'].includes(g.st));
@@ -2457,24 +2456,17 @@ export class Sim {
   }
 
   startLostKid(g) {
-    const p = this.parties[g.party];
     const spots = [['mz_4_2', 'hedge maze'], ['mz_4_2', 'hedge maze'], ['laun_c', 'laundry'], ['util_c', 'utility room'], ['stor_c', 'storage room'], ['vend', 'elevators'], ['pd_ne', 'pool']]
       .filter(([id]) => L.NODES[id] && L.isActive(L.NODES[id]));
-    if (this.lvl('floor2')) spots.push([`h${-26.4 + L.FLOOR_DX}`, 'second floor'], ['hend@2', 'second floor']);
+    if (this.lvl('floor2')) spots.push([`h${-26.4 + L.FLOOR_DX}`, 'second floor'], [`h${18.6 + L.FLOOR_DX}`, 'second floor']);
     const [node, where] = pick(spots.filter(([id]) => L.NODES[id]));
-    this.releaseSpot(g);
-    g.pose = null;
-    this.addIncident('lostkid', 130, { g: g.id, p: p.id, where, walking: true });
+    g.pendingInc = { type: 'lostkid', where };
     this.walkTo(g, node, 'lost', 1.15, { free: true, incident: true });
-    const lead = this.guests[p.leader];
-    if (lead && lead !== g) { this.say(lead, 'Has anyone seen our kid?!', 4); this.emote(lead, '😰', 8); }
-    this.toast(null, `😰 ${p.name}: their kid wandered off toward the ${where}!`, 'bad');
   }
 
   startLockout(g) {
-    const p = this.parties[g.party];
-    this.addIncident('lockout', 95, { g: g.id, p: p.id, room: p.room, walking: true });
-    this.walkTo(g, L.ROOM_BY_ID[p.room].hall, 'lockout', 1, { incident: true });
+    g.pendingInc = { type: 'lockout', room: this.parties[g.party].room };
+    this.walkTo(g, L.ROOM_BY_ID[g.pendingInc.room].hall, 'lockout', 1, { incident: true });
   }
 
   startDrunk(g) {
@@ -2513,8 +2505,7 @@ export class Sim {
   }
 
   startVending(g) {
-    const p = this.parties[g.party];
-    this.addIncident('vending', 70, { g: g.id, p: p.id, walking: true, x: -1.1, z: -26.4 });
+    g.pendingInc = { type: 'vending' };
     this.walkTo(g, 'vend', 'vending', 1, { incident: true });
   }
 
@@ -2526,25 +2517,33 @@ export class Sim {
     this.toast(null, '🦝 A raccoon got into the kitchen through the back door! Shoo it out with a mop.', 'bad');
   }
 
-  // Someone arrived where their incident happens.
+  // A lost kid, a lockout or a hungry snack machine only becomes a problem once the guest gets there:
+  // they walk over first (see startLostKid & co.), and the incident and its timer start on arrival.
   incidentArrived(g) {
-    const inc = this.incidents[g.incident];
-    if (!inc) { this.idleFor(g, 2); return; }
-    inc.walking = false;
+    const pend = g.pendingInc, p = this.parties[g.party];
+    g.pendingInc = null;
+    if (!pend || !p || p.st !== 'staying' || this.closingAt) { this.idleFor(g, 2); return; }
     g.st = 'incident';
-    switch (inc.type) {
-      case 'lostkid':
+    switch (pend.type) {
+      case 'lostkid': {
+        this.addIncident('lostkid', 130, { g: g.id, p: p.id, where: pend.where });
         this.say(g, pick(['I want my mommy...', 'Where am I?', 'I\'m not lost. You\'re lost.']), 4);
         this.sound('whisper', g);
+        const lead = this.guests[p.leader];
+        if (lead && lead !== g) { this.say(lead, 'Has anyone seen our kid?!', 4); this.emote(lead, '😰', 8); }
+        this.toast(null, `😰 ${p.name}: their kid has wandered off. Somebody saw them by the ${pend.where}.`, 'bad');
         break;
+      }
       case 'lockout': {
-        const r = L.ROOM_BY_ID[inc.room];
+        const r = L.ROOM_BY_ID[pend.room];
+        this.addIncident('lockout', 95, { g: g.id, p: p.id, room: pend.room });
         g.ry = Math.atan2(r.door.x - g.x, r.door.z - g.z);
         this.say(g, 'I locked my key card inside!', 4);
-        this.toast(null, `🚪 ${L.roomName(inc.room)} is locked out. Bring them a spare key card from behind the front desk.`, 'bad');
+        this.toast(null, `🚪 ${L.roomName(pend.room)} is locked out. Bring them a spare key card from behind the front desk.`, 'bad');
         break;
       }
       case 'vending':
+        this.addIncident('vending', 70, { g: g.id, p: p.id, x: -1.1, z: -26.4 });
         this.say(g, 'It ATE my money!', 4);
         this.sound('thud', g);
         break;
@@ -2711,7 +2710,7 @@ export class Sim {
     const base = { t: inc.t, x: at.x, z: at.z, u: 1 };
     switch (inc.type) {
       case 'slip': return g && { ...base, ic: '🤕', tx: `${g.kind === 'kid' ? 'A kid' : 'A guest'} slipped by the pool — bring a first aid kit`, u: 2 };
-      case 'lostkid': return g && p && { ...base, ic: '😰', tx: `${p.name}: their kid is lost${inc.walking ? '' : ` in the ${inc.where}`} — take them back`, u: 2 };
+      case 'lostkid': return g && p && { ...base, ic: '😰', tx: `${p.name}: their kid is lost in the ${inc.where} — take them back`, u: 2 };
       case 'lockout': return g && { ...base, ic: '🚪', tx: `${L.roomName(inc.room)} is locked out — bring a spare key card from the front desk` };
       case 'drunk': return g && { ...base, ic: '🥴', tx: `A guest passed out in the ${L.zoneAt(g.x, g.z).name} — help them up` };
       case 'elevator': return { ...base, ic: '🛗', tx: 'The elevator is stuck — reset it at the ground floor panel' };
@@ -2724,9 +2723,71 @@ export class Sim {
   // ---------- monsters ----------
   spawnMonster(k, x, z, life, until) {
     if (this.lvl('uv') && life < 1000) life *= 0.6;
-    const m = { id: this.id(), k, x, z, ry: 0, path: [], repath: 0, life, until: until || null, stun: 0, lit: 0, cool: 0, scared: new Set(), anim: 'walk', wander: null };
+    const m = {
+      id: this.id(), k, x, z, ry: 0, path: [], repath: 0, life, until: until || null, stun: 0, lit: 0, cool: 0, scared: new Set(), anim: 'walk', wander: null,
+      seen: k === 'raccoon', prey: null, preyT: 0, stepT: rand(1, 3), lookT: 0,
+    };
     this.monsters[m.id] = m;
     return m;
+  }
+
+  // Can this player see that spot? Same floor, in front of them (`cone`: the cosine of how far off
+  // straight ahead), lit well enough (in a blackout only the flashlight reaches far) and no wall between.
+  sees(pl, p, range = 24, cone = 0.7) {
+    if (pl.down > 0 || pl.car || L.floorOf(pl.x) !== L.floorOf(p.x)) return false;
+    const dx = p.x - pl.x, dz = p.z - pl.z, d = Math.hypot(dx, dz);
+    if (d > (this.power ? range : pl.fl ? Math.min(range, 12) : 5)) return false;
+    if (d > 1 && (dx * -Math.sin(pl.yaw) + dz * -Math.cos(pl.yaw)) / d < cone) return false;
+    return L.clearSight(pl.x, pl.z, p.x, p.z);
+  }
+
+  // The moment somebody lays eyes on it. It goes on the task list for everyone, and whoever saw it gets
+  // the scare. Until then a monster is only heard (footsteps, a door somewhere), never announced.
+  reveal(m, pl) {
+    if (m.seen) return;
+    m.seen = true;
+    this.sendTo(pl.id, { k: 'ev', e: 'sighting', kind: m.k, glimpse: m.glimpse ? 1 : 0 });
+  }
+
+  // A figure standing at the far end of a hallway, watching. It turns up somewhere nobody is looking
+  // (usually behind one of the crew, in plain view the moment they turn round), waits, and is gone as
+  // soon as somebody has had a look at it: the first hint of what else checks into this hotel.
+  startGlimpse(ev) {
+    const crew = Object.values(this.players).filter(p => !p.down && !p.car);
+    for (const pl of shuffle(crew.slice())) {
+      const f = L.floorOf(pl.x);
+      const spots = Object.values(L.NODES).filter(n => {
+        if (!L.isActive(n) || L.floorOf(n.x) !== f || n.pose || n.stair || n.staff || !PUBLIC_ZONES.has(L.zoneAt(n.x, n.z).id)) return false;
+        const d = Math.hypot(n.x - pl.x, n.z - pl.z);
+        return d > 8 && d < 22 && !crew.some(c => this.sees(c, n, 40, 0.3));
+      });
+      if (!spots.length) continue;
+      const behind = spots.filter(n => L.clearSight(pl.x, pl.z, n.x, n.z));
+      const n = pick(behind.length && chance(0.7) ? behind : spots);
+      const m = this.spawnMonster('porter', n.x, n.z, 25);
+      Object.assign(m, { glimpse: true, anim: 'idle', ry: Math.atan2(pl.x - n.x, pl.z - n.z) });
+      return;
+    }
+    const tries = (ev.tries || 0) + 1;
+    if (tries < 15) this.events.push({ h: this.hour() + 0.3, type: 'glimpse', tries, done: false });
+  }
+
+  glimpseTick(m, dt) {
+    m.life -= dt;
+    for (const pl of Object.values(this.players)) {
+      if (!this.sees(pl, m, 26, 0.75)) continue;
+      this.reveal(m, pl);
+      m.stare = (m.stare || 0) + dt;
+      m.ry = Math.atan2(pl.x - m.x, pl.z - m.z); // it's looking right at you
+    }
+    if (m.life <= 0 || m.stare > 0.7) { delete this.monsters[m.id]; if (m.stare) this.sound('vanish', m); }
+  }
+
+  // Where a prowling monster heads next: usually toward one of the crew, sometimes anywhere.
+  prowlSpot() {
+    const crew = Object.values(this.players).filter(pl => !pl.down && !pl.car);
+    if (crew.length && chance(0.6)) { const pl = pick(crew); return L.nearestNode(pl.x, pl.z); }
+    return pick(this.wanderSpots());
   }
 
   litBy(pl, m) {
@@ -2743,15 +2804,21 @@ export class Sim {
     const H = this.hour();
     for (const m of Object.values(this.monsters)) {
       if (m.k === 'raccoon') { this.raccoonTick(m, dt); continue; }
+      if (m.glimpse) { this.glimpseTick(m, dt); continue; }
       m.life -= dt;
       if (m.life <= 0 || (m.until && H >= m.until)) { delete this.monsters[m.id]; this.sound('vanish', m); continue; }
       if (m.cool > 0) m.cool -= dt;
+      if (!m.seen && (m.lookT -= dt) <= 0) {
+        m.lookT = 0.15;
+        const pl = Object.values(this.players).find(p => this.sees(p, m));
+        if (pl) this.reveal(m, pl);
+      }
       const speed = (m.k === 'porter' ? 4.0 : 3.5) * (this.lvl('garlic') ? 0.7 : 1) * clamp(1 + ((this.D?.horror || 1) - 1) * 0.15, 0.9, 1.12);
       const players = Object.values(this.players).filter(pl => !pl.down && !pl.car);
       let lit = false;
       for (const pl of players) if (pl.fl && this.litBy(pl, m)) lit = true;
       if (lit) m.lit += dt; else m.lit = Math.max(0, m.lit - dt * 0.5);
-      if (m.lit > (this.lvl('flashlight') ? 0.6 : 1.2)) { m.stun = 3.5; m.lit = 0; m.path = []; this.sound('screech', m); }
+      if (m.lit > 1.2 / (1 + 0.15 * this.lvl('security'))) { m.stun = 3.5; m.lit = 0; m.path = []; this.sound('screech', m); }
       if (m.stun > 0) {
         m.stun -= dt;
         m.anim = 'stun';
@@ -2765,8 +2832,23 @@ export class Sim {
         continue;
       }
       m.anim = 'walk';
-      let target = null, td = 28 * 28;
-      if (m.cool <= 0) for (const pl of players) { const d = dsq(pl, m); if (d < td) { td = d; target = pl; } }
+      // It hunts whoever it can see (or nearly bumps into), and keeps after them for a few seconds once
+      // they're out of sight. Otherwise it prowls, slowly, usually toward wherever the crew is.
+      let target = null;
+      if (m.cool <= 0) {
+        let best = Infinity;
+        for (const pl of players) {
+          const d2 = dsq(pl, m), reach = this.power || pl.fl ? 18 : 8;
+          if (d2 >= best || L.floorOf(pl.x) !== L.floorOf(m.x)) continue;
+          if (d2 < 9 || (d2 < reach * reach && L.clearSight(m.x, m.z, pl.x, pl.z))) { best = d2; target = pl; }
+        }
+        if (target) { m.prey = target.id; m.preyT = 6; }
+        else if (m.prey && (m.preyT -= dt) > 0) target = players.find(pl => pl.id === m.prey) || null;
+        else m.prey = null;
+      }
+      const td = target ? dsq(target, m) : Infinity;
+      m.stepT -= dt;
+      if (m.stepT <= 0) { m.stepT = target ? rand(0.6, 0.9) : rand(1.5, 2.5); this.sound('stalk', m); } // heard before it's seen
       if (target) {
         m.wander = null;
         if (td < 20 && L.zoneAt(m.x, m.z).id === L.zoneAt(target.x, target.z).id) this.monsterStep(m, target.x, target.z, speed * 1.08, dt);
@@ -2780,10 +2862,10 @@ export class Sim {
           }
           if (m.path.length && !this.ride(m, m.path, dt)) { this.monsterStep(m, m.path[0].x, m.path[0].z, speed, dt); if (dsq(m.path[0], m) < 0.04) m.path.shift(); }
         }
-        if (td < 0.9) { this.knockDown(target, 10, 'caught'); m.cool = 4; m.path = []; }
+        if (td < 0.9) { this.reveal(m, target); this.knockDown(target, 10, 'caught'); m.cool = 4; m.path = []; m.prey = null; }
       } else {
         if (!m.wander || dsq(m.wander, m) < 0.3) {
-          m.wanderPath = (L.findPath(L.nearestNode(m.x, m.z), pick(this.wanderSpots())) || []).map(id => L.NODES[id]);
+          m.wanderPath = (L.findPath(L.nearestNode(m.x, m.z), this.prowlSpot()) || []).map(id => L.NODES[id]);
           m.wander = m.wanderPath[m.wanderPath.length - 1] || { x: m.x, z: m.z };
         }
         if (m.wanderPath?.length) { if (!this.ride(m, m.wanderPath, dt)) { this.monsterStep(m, m.wanderPath[0].x, m.wanderPath[0].z, speed * 0.6, dt); if (dsq(m.wanderPath[0], m) < 0.04) m.wanderPath.shift(); } }
@@ -2797,7 +2879,7 @@ export class Sim {
         const gz = L.zoneAt(g.x, g.z);
         if (gz.id !== mzone.id || gz.room !== mzone.room) continue;
         m.scared.add(p.id);
-        this.adjust(p, -25, 'horror');
+        this.adjust(p, -18, 'horror');
         this.say(g, pick(LINES.scared), 3);
         this.sound('scream', g);
         if (p.st === 'staying' && p.room) this.walkTo(g, `r${p.room}_bed`, 'bed', 2.4);
@@ -2835,7 +2917,6 @@ export class Sim {
     const tx = car ? car.x : rand(-20, 20), tz = car ? car.z : rand(22, 32);
     this.ufo = { x: -140, y: 45, z: tz, tx, tz, ph: 'in', t: 0, car: car?.id ?? null };
     this.sound('ufo', { x: tx, z: tz });
-    this.toast(null, '🛸 Strange lights over the parking lot...', 'horror');
   }
 
   updateUfo(dt) {
@@ -2851,16 +2932,13 @@ export class Sim {
     } else if (u.ph === 'beam') {
       u.bt += dt;
       const c = u.car && this.cars[u.car];
-      if (c && this.lvl('tinfoil')) {
-        if (!u.foiled) { u.foiled = true; this.toast(null, '🛸 The tractor beam bounced off the tinfoil. Take that, aliens.', 'good'); }
-        if (u.bt > 6) u.ph = 'out';
-      } else if (c && !c.driver && (c.x - u.x) ** 2 + (c.z - u.z) ** 2 < 9) {
+      if (c && !c.driver && (c.x - u.x) ** 2 + (c.z - u.z) ** 2 < 9) {
         c.lift = Math.min(1, c.lift + dt / 9);
         if (c.lift >= 1) {
           const p = this.parties[c.party];
           if (p) { p.flags.carGone = true; p.car = null; }
           delete this.cars[c.id];
-          this.toast(null, `🛸 The ${c.name} was abducted!`, 'horror');
+          this.toast(null, `🛸 The ${c.name} is gone from the parking lot. There's a scorched circle where it was.`, 'bad');
           u.ph = 'out';
         }
       } else if (c) { c.lift = 0; u.car = null; }
@@ -2974,8 +3052,9 @@ export class Sim {
     this.money -= cost;
     this.upgrades[uid] = lv + 1;
     this.applyFlags();
-    if (uid === 'supplies' || L.FLOORS.some(F => F.flag === uid)) this.spawnTools();
-    this.toast(null, `${u.icon} ${pl.name} bought ${u.name}!`, 'good');
+    if (uid === 'cleaning' || L.FLOORS.some(F => F.flag === uid)) this.spawnTools();
+    const what = u.cat === 'hotel' ? `upgraded the ${u.name}: ${u.levels[lv][0]}` : u.helper ? (lv ? `trained the ${u.name} (level ${lv + 1})` : `hired a ${u.name}`) : `built the ${u.name}`;
+    this.toast(null, `${u.icon} ${pl.name} ${what}!`, 'good');
     this.sound('kaching', pl);
   }
 
@@ -3043,11 +3122,12 @@ export class Sim {
     }
     const circles = Object.values(this.messes).filter(m => m.t === 'circle');
     for (const m of circles) T.push({ ic: '⛧', tx: `Scrub the summoning circle (${L.zoneAt(m.x, m.z).name})`, t: (1 - (m.charge || 0)) * 70, x: m.x, z: m.z, u: 1 });
-    const bodies = Object.values(this.items).filter(it => it.t === 'body' && !it.holder);
-    const blood = Object.values(this.messes).filter(m => m.t === 'blood');
+    // Evidence only goes on the list once somebody has seen it (security cameras see it straight away).
+    const known = e => this.lvl('cameras') || this.spotted.has(e.id);
+    const bodies = Object.values(this.items).filter(it => it.t === 'body' && !it.holder && known(it));
+    const blood = Object.values(this.messes).filter(m => m.t === 'blood' && known(m));
     if (bodies.length) T.push({ ic: '⚰️', tx: 'Get the body to the dumpster before a guest sees it', t: -1, x: bodies[0].x, z: bodies[0].z, u: 2, secret: !this.lvl('cameras') });
     if (blood.length) T.push({ ic: '🩸', tx: `Mop up the blood (${blood.length})`, t: -1, x: blood[0].x, z: blood[0].z, u: 2, secret: !this.lvl('cameras') });
-    for (const a of this.alerts) T.push({ ic: a.ic, tx: a.tx, t: -1, x: a.x, z: a.z, u: 2 });
     const zones = {};
     for (const m of Object.values(this.messes)) {
       if (m.room || ['circle', 'blood', 'debris', 'table'].includes(m.t)) continue;
@@ -3073,7 +3153,10 @@ export class Sim {
     const debris = Object.values(this.messes).filter(m => m.t === 'debris');
     if (debris.length >= 2) T.push({ ic: '🏊', tx: `Skim the pool (${debris.length} gunk)${this.lvl('skimmer') ? ' (Pool Bot)' : ''}`, t: -1, x: 20, z: -2, u: debris.length > 5 ? 1 : 0, bot: this.lvl('skimmer') ? 1 : 0 });
     for (const inc of Object.values(this.incidents)) { const t = this.incidentTask(inc); if (t) T.push(t); }
-    for (const m of Object.values(this.monsters)) if (m.k !== 'raccoon') T.push({ ic: '👁️', tx: m.k === 'porter' ? 'The Night Porter is hunting staff' : 'A shade is loose!', t: -1, x: m.x, z: m.z, u: 2, secret: !this.lvl('cameras'), mon: 1 });
+    for (const m of Object.values(this.monsters)) {
+      if (m.k === 'raccoon' || m.glimpse || !m.seen) continue;
+      T.push({ ic: '👁️', tx: m.k === 'porter' ? 'The Night Porter is stalking the halls' : 'A shade is loose in the hotel', t: -1, x: m.x, z: m.z, u: 2, secret: !this.lvl('cameras'), mon: 1 });
+    }
     // Jobs a helper already has are listed after the ones that need a person.
     T.sort((a, b) => (a.bot || 0) - (b.bot || 0) || (b.u || 0) - (a.u || 0) || (a.t < 0 ? 1e9 : a.t) - (b.t < 0 ? 1e9 : b.t));
     this.tasks = T.slice(0, 18).map(t => ({ ...t, t: t.t < 0 ? -1 : Math.round(t.t), x: r2(t.x), z: r2(t.z) }));
@@ -3101,7 +3184,7 @@ export class Sim {
     const tiers = {};
     for (const t of Object.keys(TIERS)) tiers[t] = this.vacantRooms(t).length;
     const prices = {};
-    for (const t of Object.keys(TIERS)) prices[t] = Math.round(A.rate * TIERS[t].price * (this.lvl('billboard') ? 1.1 : 1));
+    for (const t of Object.keys(TIERS)) prices[t] = Math.round(A.rate * TIERS[t].price * this.rateMul());
     return {
       g: g.id, m: g.qmode, c: p.card, n: p.name, sz: p.size, room: p.room, k: g.rk, s: g.seed, w: g.wrong ? 1 : 0,
       free: this.vacantRooms().length, pt: Math.round(g.patience), tiers, prices, taste: p.taste,
@@ -3130,7 +3213,7 @@ export class Sim {
       c: Object.values(this.cars).map(c => ({ i: c.id, m: c.model, cl: c.color, x: r2(c.x), z: r2(c.z), r: r2(c.ry), d: c.driver, st: c.st, lf: r2(c.lift), n: c.name })),
       it: Object.values(this.items).map(it => ({ i: it.id, t: it.t, x: r2(it.x), y: r2(it.y), z: r2(it.z), r: r2(it.ry), h: it.holder, rm: it.room, cl: it.color, of: it.of, c: it.c, hm: it.home && !it.holder && (it.x - it.home.x) ** 2 + (it.z - it.home.z) ** 2 < 0.05 ? 1 : 0 })),
       m: Object.values(this.messes).map(m => ({ i: m.id, t: m.t, x: r2(m.x), y: r2(m.y), z: r2(m.z), ch: m.charge !== undefined ? r2(m.charge) : undefined, rm: m.room })),
-      mn: Object.values(this.monsters).map(m => ({ i: m.id, k: m.k, x: r2(m.x), z: r2(m.z), y: r2(m.y || 0), r: r2(m.ry), a: m.anim })),
+      mn: Object.values(this.monsters).map(m => ({ i: m.id, k: m.k, x: r2(m.x), z: r2(m.z), y: r2(m.y || 0), r: r2(m.ry), a: m.anim, sn: m.seen && !m.glimpse ? 1 : 0 })),
       rm: L.ROOMS.map(r => {
         const s = this.rooms[r.id];
         const p = s.party && this.parties[s.party];

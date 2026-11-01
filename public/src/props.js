@@ -33,23 +33,6 @@ function signPlane(text, w, h, opt = {}) {
 
 const WOOD = '#5a3a24', DARKWOOD = '#3a2416', BRASS = '#b08d3c', STEEL = '#9aa1a6', WHITE = '#efece6';
 
-// A stair tread: a slice of a ring from the pole out to radius r, `span` radians wide, top at y = 0.
-const treadCache = new Map();
-function treadGeometry(r, span) {
-  const key = `${r}|${span}`;
-  if (treadCache.has(key)) return treadCache.get(key);
-  const r0 = 0.1, s = new THREE.Shape();
-  s.moveTo(r0, 0);
-  s.lineTo(r, 0);
-  s.absarc(0, 0, r, 0, span, false);
-  s.lineTo(r0 * Math.cos(span), r0 * Math.sin(span));
-  s.absarc(0, 0, r0, span, 0, true);
-  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.06, bevelEnabled: false, curveSegments: 4 });
-  geo.rotateX(Math.PI / 2); // the shape's y becomes +z, its thickness hangs below y = 0
-  treadCache.set(key, geo);
-  return geo;
-}
-
 export const PROPS = {
   bed(f) {
     const g = new THREE.Group();
@@ -1102,18 +1085,6 @@ Object.assign(PROPS, {
     box(g, 0.2, 0.26, 0.22, '#d9d2c3', -2.6, 1.62, -10.38);
     return g;
   },
-  buffetFood() {
-    const g = new THREE.Group();
-    const y = 1.08;
-    for (let i = 0; i < 3; i++) cyl(g, 0.12, 0.12, 0.04, '#c98a3b', -1.8, y + i * 0.045, 0, 12);
-    for (let i = 0; i < 4; i++) { cyl(g, 0.07, 0.07, 0.012, '#fbfbf5', -0.6 + (i % 2) * 0.16 - 0.08, y, (i < 2 ? -1 : 1) * 0.08, 10); ball(g, 0.026, '#f4b400', -0.6 + (i % 2) * 0.16 - 0.08, y + 0.012, (i < 2 ? -1 : 1) * 0.08, 1, 0.6, 1); }
-    for (let i = 0; i < 4; i++) box(g, 0.22, 0.016, 0.04, '#8b3a1a', 0.6, y, -0.12 + i * 0.08);
-    for (let i = 0; i < 5; i++) ball(g, 0.06, i % 2 ? '#f77f00' : '#d4a373', 1.7 + (i % 3) * 0.12 - 0.12, y + 0.04, (i < 3 ? -1 : 1) * 0.07, 1.3, 0.8, 1);
-    const p = signPlane('HELP YOURSELF', 0, 0.16, { color: '#f3e6c4', bg: '#3a1d1d', font: '600 40px Georgia, serif', h: 56 });
-    p.position.set(0, 1.5, -0.35);
-    g.add(p);
-    return g;
-  },
   breadBox() {
     const g = new THREE.Group();
     box(g, 0.45, 0.24, 0.3, '#8a5a3a', 0, 1.05, 0);
@@ -1280,58 +1251,83 @@ Object.assign(PROPS, {
     for (let i = 0; i < 3; i++) box(g, 0.42, 0.02, 0.09, LIGHTS.heat, -0.6 + i * 0.6, 2.195, 0);
     return g;
   },
-  // One turn of a spiral staircase, from this floor up to the next: oak treads cantilevered off an iron
-  // pole, a baluster at the end of every tread and a handrail that follows the climb.
-  spiralFlight(f) {
+  // One storey of the staircase, like the stairs in a house: oak treads over white risers with a red
+  // runner held down by brass rods, a stringer along the wall carrying a handrail on brackets, and white
+  // balusters under a sloping banister on the open side. The origin is the foot of the flight, which
+  // climbs toward -x; the wall is on the -z side. closed: the ground floor's flight, boarded up
+  // underneath, with a cupboard door under the landing.
+  stairFlight(f) {
     const g = new THREE.Group();
-    const n = 16, rise = 3.6 / n, step = (Math.PI * 2) / n, r = f.r - 0.04;
-    const tread = treadGeometry(r, step * 1.12);
-    const oak = mat('#6b4528'), nosing = mat('#3a2416'), iron = mat('#26272a');
-    const rail = [];
-    for (let k = 0; k < n; k++) {
-      const a = f.exit + k * step, y = (k + 0.6) * rise;
-      const t = new THREE.Mesh(tread, k % 2 ? oak : mat('#714a2b'));
-      t.position.y = y;
-      t.rotation.y = -a;
-      g.add(t);
-      const am = a + step * 0.55, bx = Math.cos(am) * (r - 0.07), bz = Math.sin(am) * (r - 0.07);
-      cyl(g, 0.014, 0.014, 0.9, iron, bx, y + 0.45, bz, 5);
-      rail.push(new THREE.Vector3(bx, y + 0.92, bz));
-      if (k === n - 1) rail.push(new THREE.Vector3(Math.cos(f.exit + n * step) * (r - 0.07), 3.6 + 0.92, Math.sin(f.exit + n * step) * (r - 0.07)));
+    const n = f.steps, run = f.run, w = f.span, hw = w / 2, rise = 3.6 / n, d = run / n, slope = 3.6 / run;
+    const len = Math.hypot(run, 3.6), ang = Math.atan2(3.6, run), cosA = Math.cos(ang);
+    const oak = mat('#6b4528'), oak2 = mat('#603e24'), paint = mat('#e6dfd0'), runner = mat('#6e1f2a');
+    const brass = mat(BRASS), rail = mat('#4a2c1a');
+    const nose = x => rise - x * slope; // height of the tread nosings above a point on the floor
+    for (let i = 0; i < n; i++) {
+      const x0 = -i * d, top = (i + 1) * rise;
+      box(g, d + 0.03, 0.045, w - 0.04, i % 2 ? oak : oak2, x0 - d / 2 + 0.015, top - 0.0225, 0);
+      box(g, 0.025, rise - 0.045, w - 0.06, paint, x0 - 0.0125, i * rise + (rise - 0.045) / 2, 0);
+      box(g, d, 0.01, w * 0.58, runner, x0 - d / 2, top + 0.005, 0);
+      box(g, 0.01, rise - 0.045, w * 0.58, runner, x0 + 0.005, i * rise + (rise - 0.045) / 2, 0);
+      cyl(g, 0.008, 0.008, w * 0.64, brass, x0 + 0.018, i * rise + 0.014, 0, 6).rotation.x = Math.PI / 2;
     }
-    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rail), 64, 0.028, 6, false), nosing));
-    cyl(g, 0.09, 0.09, 3.6, iron, 0, 1.8, 0, 10);
-    for (let k = 0; k < 4; k++) cyl(g, 0.12, 0.12, 0.06, iron, 0, 0.3 + k * 0.9, 0, 10);
-    return g;
-  },
-  // The balustrade round a stairwell on its open sides, with a gap at the opening.
-  stairRail(f) {
-    const g = new THREE.Group();
-    const r = f.r, hall = f.exit === 0 ? 1 : -1;
-    const wood = mat('#4a2c1a'), iron = mat('#26272a');
-    const run = (x1, z1, x2, z2) => {
-      const len = Math.hypot(x2 - x1, z2 - z1), along = Math.abs(x2 - x1) > Math.abs(z2 - z1);
-      const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
-      box(g, along ? len : 0.07, 0.07, along ? 0.07 : len, wood, cx, 1.0, cz);
-      box(g, along ? len : 0.04, 0.04, along ? 0.04 : len, iron, cx, 0.12, cz);
-      const k = Math.max(1, Math.round(len / 0.14));
-      for (let i = 0; i <= k; i++) cyl(g, 0.012, 0.012, 0.88, iron, x1 + ((x2 - x1) * i) / k, 0.56, z1 + ((z2 - z1) * i) / k, 4);
-      for (const [x, z] of [[x1, z1], [x2, z2]]) box(g, 0.08, 1.06, 0.08, wood, x, 0.53, z);
+    // a board sloping with the flight, its top edge this far above the nosing line
+    const slab = (z, ht, th, above, material) => {
+      const m = box(g, len, ht, th, material, -run / 2, nose(-run / 2) + (above - ht / 2) / cosA, z);
+      m.rotation.z = -ang;
+      return m;
     };
-    run(-r, r, r, r);                       // the side facing the hallway's far wall
-    run(hall * r, -r, hall * r, -0.6);      // the opening side, either side of the gap
-    run(hall * r, 0.6, hall * r, r);
-    if (f.east) run(r, -r, r, r);           // downstairs there's no end wall behind the east stair
+    slab(-hw + 0.025, 0.3, 0.05, 0.07, rail);   // wall stringer
+    slab(hw - 0.025, 0.3, 0.05, 0.07, rail);    // open stringer
+    slab(0, 0.025, w - 0.06, -0.3, paint);      // the plastered underside
+    // the handrail on the wall, on brass brackets
+    const wallRail = cyl(g, 0.026, 0.026, len, rail, -run / 2, nose(-run / 2) + 0.88, -hw + 0.085, 8);
+    wallRail.rotation.z = Math.PI / 2 - ang;
+    for (let x = -0.5; x > -run + 0.2; x -= 1.3) cyl(g, 0.012, 0.012, 0.07, brass, x, nose(x) + 0.84, -hw + 0.04, 6).rotation.x = Math.PI / 2;
+    // the banister: a newel post at the foot, a baluster on every tread, a rail up to the landing
+    for (let i = 0; i < n; i++) {
+      const x = -(i + 0.5) * d, base = (i + 1) * rise, h = nose(x) + 0.92 - base;
+      cyl(g, 0.017, 0.017, h, paint, x, base + h / 2, hw - 0.05, 6);
+    }
+    const banister = box(g, len, 0.07, 0.085, rail, -run / 2, nose(-run / 2) + 0.95, hw - 0.05);
+    banister.rotation.z = -ang;
+    box(g, 0.12, 1.2, 0.12, rail, 0.02, 0.6, hw - 0.05);
+    box(g, 0.16, 0.06, 0.16, rail, 0.02, 1.22, hw - 0.05);
+    ball(g, 0.06, rail, 0.02, 1.3, hw - 0.05);
+    if (f.closed) {
+      // boarded up underneath: a painted panel from the foot back to the end wall, and a cupboard door
+      const back = -5.95, s = new THREE.Shape();
+      const under = x => nose(x) - 0.36 / cosA;
+      const xTop = -(3.2 - rise + 0.36 / cosA) / slope;
+      s.moveTo(-0.6, 0);
+      s.lineTo(back, 0);
+      s.lineTo(back, 3.2);
+      s.lineTo(xTop, 3.2);
+      s.lineTo(-0.6, under(-0.6));
+      s.closePath();
+      const panel = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.04, bevelEnabled: false }), paint);
+      panel.position.z = hw - 0.02;
+      g.add(panel);
+      box(g, Math.abs(back) - 0.6, 0.12, 0.02, rail, (back - 0.6) / 2, 0.06, hw + 0.03);   // skirting
+      box(g, 0.78, 1.82, 0.03, paint, -5.15, 0.91, hw + 0.035);                           // door frame
+      box(g, 0.68, 1.74, 0.03, mat('#d8cfbd'), -5.15, 0.87, hw + 0.05);                   // the door
+      ball(g, 0.03, brass, -4.88, 0.92, hw + 0.075);
+    }
     return g;
   },
-  // A short rail across the top step where the spiral ends: nothing to climb past it.
-  stairStop(f) {
-    const g = new THREE.Group();
-    const r = f.r, hall = f.exit === 0 ? 1 : -1, z = Math.cos(f.exit) * 0.06;
-    box(g, r - 0.1, 0.07, 0.07, mat('#4a2c1a'), hall * (r + 0.1) / 2, 1.0, z);
-    for (let i = 0; i < 5; i++) cyl(g, 0.012, 0.012, 0.9, mat('#26272a'), hall * (0.12 + (i * (r - 0.12)) / 4), 0.5, z, 4);
-    cyl(g, 0.09, 0.09, 1.0, mat('#26272a'), 0, 0.5, 0, 10); // the pole ends here, with a brass finial
-    ball(g, 0.13, mat('#b08d3c'), 0, 1.08, 0);
+  // A banister along the edge of the stairwell opening upstairs (lying along x), with newel posts.
+  stairRail(f) {
+    const g = new THREE.Group(), h = f.run / 2;
+    const rail = mat('#4a2c1a'), paint = mat('#e6dfd0');
+    box(g, f.run, 0.07, 0.09, rail, 0, 0.98, 0);
+    box(g, f.run, 0.05, 0.07, rail, 0, 0.06, 0);
+    const k = Math.max(2, Math.round(f.run / 0.14));
+    for (let i = 1; i < k; i++) cyl(g, 0.017, 0.017, 0.88, paint, -h + (f.run * i) / k, 0.52, 0, 6);
+    for (const x of [-h, h]) {
+      box(g, 0.12, 1.14, 0.12, rail, x, 0.57, 0);
+      box(g, 0.16, 0.06, 0.16, rail, x, 1.16, 0);
+      ball(g, 0.06, rail, x, 1.24, 0);
+    }
     return g;
   },
   // Spare key cards on a little rack behind the front desk.
@@ -1479,15 +1475,6 @@ Object.assign(PROPS, {
     q.position.set(0, 5.9, 0.14);
     g.add(q);
     for (const s of [-1, 0, 1]) { box(g, 0.06, 0.06, 0.9, '#2b2b2b', s * 2, 8.0, 0.4); box(g, 0.35, 0.15, 0.25, LIGHTS.outdoor, s * 2, 7.95, 0.85); }
-    return g;
-  },
-  tinfoilSign() {
-    const g = new THREE.Group();
-    cyl(g, 0.05, 0.05, 2.2, '#5c5c5c', 0, 1.1, 0, 6);
-    box(g, 1.6, 0.6, 0.05, mat('#cfd4d8', { emissive: '#30363a', emissiveIntensity: 0.4 }), 0, 2.1, 0);
-    const p = signPlane('TINFOIL-PROTECTED PARKING', 1.5, 0.2, { color: '#111111', bg: '#e9ecef', font: 'bold 36px Arial', h: 52 });
-    p.position.set(0, 2.15, 0.03);
-    g.add(p);
     return g;
   },
 });
