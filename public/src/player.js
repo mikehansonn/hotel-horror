@@ -43,7 +43,7 @@ export class Player {
     document.addEventListener('keyup', e => { this.keys[e.code] = false; });
     window.addEventListener('blur', () => { this.keys = {}; });
     document.addEventListener('mousemove', e => {
-      if (!this.locked || this.car) return;
+      if (!this.locked || this.car || this.frozen) return; // frozen: at the monitors, or watching someone else
       const s = 0.0022 * this.sens;
       this.yaw -= e.movementX * s;
       this.pitch -= e.movementY * s * (this.invertY ? -1 : 1);
@@ -64,6 +64,15 @@ export class Player {
   toggleFlash() { this.flOn = !this.flOn; }
 
   get floor() { return L.floorOf(this.pos.x); }
+
+  // Through the basement door: arrive somewhere else entirely, standing at height y.
+  teleport(x, z, yaw, y = 0) {
+    this.pos.set(x, y, z);
+    this.vel.set(0, 0, 0);
+    this.vy = 0;
+    this.yaw = yaw;
+    this.pitch = -0.1;
+  }
 
   // Step out of the elevator on another floor, facing the hallway.
   rideTo(f) {

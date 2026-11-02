@@ -8,7 +8,7 @@ const REACH = 2.7;
 const origin = new THREE.Vector3();
 const dir = new THREE.Vector3();
 const STATION_LIST = Object.values(L.STATIONS);
-const ITEM_HIT = { mop: [0.1, 0.45], net: [0.1, 0.5], plunger: [0.1, 0.35], luggage: [0.4, 0.42], body: [0.25, 0.7], towels: [0.12, 0.3], tray: [0.05, 0.3], extinguisher: [0.3, 0.32], dishes: [0.12, 0.32], medkit: [0.14, 0.3], keycard: [0.02, 0.2] };
+const ITEM_HIT = { mop: [0.1, 0.45], net: [0.1, 0.5], plunger: [0.1, 0.35], luggage: [0.4, 0.42], body: [0.25, 0.7], towels: [0.12, 0.3], tray: [0.05, 0.3], extinguisher: [0.3, 0.32], dishes: [0.12, 0.32], medkit: [0.14, 0.3], keycard: [0.02, 0.2], oldkey: [0.03, 0.2] };
 // Tools that wait on the floor at home instead of hanging on a rack.
 const FLOOR_TOOLS = new Set(['extinguisher', 'medkit']);
 const MESS_HIT = { circle: 0.95, bed: 0.95, table: 0.6, clog: 0.38, debris: 0.55 };
@@ -20,8 +20,10 @@ const DESK_TIERS = { Digit1: 'basic', Numpad1: 'basic', Digit2: 'suite', Numpad2
 const dishName = pc => (String(pc).startsWith('burnt:') ? 'burnt food' : (DISHES[pc]?.name || ITEMS[pc]?.name || pc).toLowerCase());
 
 export class Interact {
-  constructor({ camera, player, hud, act, sfx, view }) {
-    Object.assign(this, { camera, player, hud, act, sfx, view });
+  // ui: what main does for prompts that open something (the cameras, a letter, the terminal) or move
+  // you (the basement door).
+  constructor({ camera, player, hud, act, sfx, view, ui }) {
+    Object.assign(this, { camera, player, hud, act, sfx, view, ui });
     this.action = null;
     this.holdT = 0;
     this.holding = false;
@@ -88,6 +90,7 @@ export class Interact {
     if (a.type === 'press') { this.act(a.act); this.sfx.play(a.sound || 'pickup'); }
     else if (a.type === 'desk') this.hud.openDesk();
     else if (a.type === 'elevator') { this.hud.openElevator(this.player.floor); this.sfx.play('beep'); }
+    else if (a.type === 'ui') { this.ui?.[a.ui]?.(); this.sfx.play('click'); }
   }
 
   dropItem() {
@@ -137,7 +140,7 @@ export class Interact {
     // Aim in layout space: upper floors sit FLOOR_DX along x there instead of FLOOR_H up.
     const f = this.player.floor;
     origin.x += f * L.FLOOR_DX;
-    origin.y -= f * L.FLOOR_H;
+    origin.y -= L.levelY(f);
     const px = this.player.pos.x, pz = this.player.pos.z;
     this.wallsNear = L.WALLS.filter(w => w.x2 > px - 5 && w.x1 < px + 5 && w.z2 > pz - 5 && w.z1 < pz + 5);
     let best = null, bestT = Infinity;
@@ -172,6 +175,7 @@ export class Interact {
     }
     for (const c of snap.c) if (near(c.x, c.z, 6)) test(c.x, 0.9, c.z, 1.7, 4.4, { kind: 'car', c });
     for (const m of snap.mn) if (m.k === 'raccoon' && near(m.x, m.z)) test(m.x, (m.y || 0) + 0.3, m.z, 0.45, REACH + 0.5, { kind: 'critter', m });
+    for (const m of snap.mn) if (m.k === 'mimic' && m.dg && near(m.x, m.z)) test(m.x, (m.y || 0) + 0.4, m.z, 0.42, REACH, { kind: 'bag', m });
     return best;
   }
 
@@ -219,6 +223,10 @@ export class Interact {
       if (held) return info(`${def.name}: hands must be empty`);
       return hold(label, cleanTime(m.t, up), { a: 'clean', id: m.i }, `m${m.i}`, { sfx: m.t === 'bed' ? 'curtain' : 'scrub' });
     }
+    if (t.kind === 'bag') { // it really does look just like a suitcase
+      if (held) return info('Hands full (Q drop · Right-click throw)');
+      return press('Pick up suitcase for Room 000', { a: 'poke', m: t.m.i }, 'pickup');
+    }
     if (t.kind === 'critter') {
       if (held !== 'mop') return info('A raccoon! Grab a mop to shoo it out');
       return hold('Shoo the raccoon out', 0.8, { a: 'shoo', m: t.m.i }, `rac${t.m.i}`, { sfx: 'whoosh', done: 'whoosh' });
@@ -232,6 +240,7 @@ export class Interact {
         case '🚪': return held === 'keycard' ? press('Hand over the spare key card', help, 'chime') : info('Locked out. Spare key cards hang behind the front desk');
         case '🥴': return held ? info('Passed out. Free your hands to help them up') : hold('Help them up and send them to bed', 1.5, help, `help${g.i}`, { sfx: 'scrub', done: 'chime' });
         case '😤': return info('The vending machine ate their money. Give the machine a whack');
+        case '🌀': return held ? info('Staring at the iron door. Free your hands to shake them out of it') : hold('Snap them out of it', 1.5, { a: 'rouse', g: g.i }, `rouse${g.i}`, { sfx: 'scrub', done: 'chime' });
       }
       if (g.ic === '👀' || L.isStaffArea(g.x, g.z)) return press('Escort them out of the staff area', { a: 'escort', g: g.i }, 'knock');
       const wants = g.ic ? Object.keys(DISHES).filter(k => g.ic.includes(DISHES[k].icon)) : [];
@@ -249,7 +258,22 @@ export class Interact {
       return press(`Drive the ${c.n}${why}`, { a: 'car-enter', c: c.i }, 'doorslam');
     }
     const st = t.st;
+    const between = snap.ph === 'lobby' || snap.ph === 'break';
+    const ui = (label, name) => ({ type: 'ui', label, ui: name });
     switch (st.kind) {
+      case 'phone':
+        if (!snap.phn) return info('The telephone. Quiet, for now');
+        return press(`Answer the phone${snap.phn.n > 1 ? ` (${snap.phn.n} calls waiting)` : ''}`, { a: 'station', s: st.id }, 'click');
+      case 'cctv': return snap.ph === 'shift' ? ui('Watch the security cameras', 'cctv') : info('The security monitors. Nothing to watch between shifts');
+      case 'letter': return ui('Read Mr. Harrow\'s letter', 'letter');
+      case 'terminal': return between ? ui('Order upgrades for the hotel', 'terminal') : info('The order terminal. It only takes orders between shifts');
+      case 'cellarDoor': return L.FLAGS.bsm_open ? ui('Go down into the basement', 'down') : info('DO NOT OPEN. It\'s locked; Mr. Harrow checks the lock himself');
+      case 'cellarUp': return ui('Go back upstairs', 'up');
+      case 'ironDoor':
+        if (held === 'oldkey' && snap.sto?.fin === 'key') return hold('Lock the iron door', 4, { a: 'station', s: st.id }, 'irondoor', { sfx: 'creak', done: 'doorslam' });
+        return info(snap.sto?.fin === 'key' ? 'An iron door in chains. It needs Mr. Harrow\'s brass key' : 'An iron door, wrapped in chains. Something on the other side is breathing');
+      case 'ledger': return ui('Read the hotel register (1926)', 'ledger');
+      case 'cart': return info(snap.sto?.fin === 'key' ? 'The old porter\'s cart' : 'The old porter\'s cart. An empty brass hook');
       case 'elevator':
         if (L.FLAGS.elev_out) return st.floor === 0 ? hold('Reset the stuck elevator', 3, { a: 'station', s: st.id }, 'elev_fix', { sfx: 'beep', done: 'elevator' }) : info('Out of order. Take the stairs at the west end of the hall (the reset panel is downstairs)');
         return { type: 'elevator', label: 'Call the elevator' };

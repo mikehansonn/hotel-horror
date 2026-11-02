@@ -1,8 +1,9 @@
 // DOM HUD: clock & timeline, rating, tasks, minimap, waypoint, pings, prompts, the check-in card,
-// toasts, surveys and the between-shift screens (Manager's Office, results).
+// toasts, surveys, phone calls, the security monitors and the between-shift screens (the break room's
+// letter and order terminal, results).
 import * as THREE from 'three';
 import * as L from './layout.js';
-import { UPGRADES, UPGRADE_CATS, UPGRADE_BY_ID, PLAYER_COLORS, ITEMS, ROUNDS, TIERS, TASTE_LABEL, TASTE_WANTS, SUITE_COST, HELPERS } from './content.js';
+import { UPGRADES, UPGRADE_CATS, UPGRADE_BY_ID, PLAYER_COLORS, ITEMS, ROUNDS, TIERS, TASTE_LABEL, TASTE_WANTS, SUITE_COST, HELPERS, LETTERS, OVERTIME_LETTER, LEDGER, EPILOGUE } from './content.js';
 import { DIFF_OPTIONS, PRESETS, crewSummary, difficulty } from './difficulty.js';
 import { fmtClock, clamp } from './util.js';
 import { makeLook } from './looks.js';
@@ -29,14 +30,14 @@ const TIPS = {
   mess: 'Messes cost you stars. Grab a mop from the SUPPLIES rack in the lobby and hold E on the mess.',
   pool: 'The pool is getting gross. Use the pool net and hold E on the gunk.',
   room: 'Dirty rooms can\'t be given to new guests. Make the bed and clean up the mess inside.',
-  blackout: 'Blackout! Press F for your flashlight and head to the Utility Room (west end of the hallway) to reset the breaker.',
+  blackout: 'Blackout! Press F for your flashlight. The breaker box is outside: out the front doors and round the back of the hotel.',
   body: 'There is a body. Carry it to the DUMPSTER (outside, west of the entrance) and mop up the blood before a guest sees it.',
   circle: 'Summoning circles! Scrub them with a mop before they finish charging.',
   curtains: 'Vampires burn at sunrise. Close the curtains in their rooms before 6 AM.',
   monster: 'Whatever that was, it hunts anyone it can see. Shine your flashlight (F) at it to drive it back, or get out of its sight and run. Listen for its footsteps.',
   cold: 'The aliens want their rooms FREEZING. Use the thermostat next to the door inside their room.',
   cards: 'Read the check-in cards carefully. Some guests should NOT be let in. Press X to turn them away.',
-  tiers: 'Fancy guests want fancy rooms. Pick the room type at the desk (1 Standard · 2 Suite · 3 Presidential). Renovate suites in the Manager\'s Office.',
+  tiers: 'Fancy guests want fancy rooms. Pick the room type at the desk (1 Standard · 2 Suite · 3 Presidential). Renovate suites at the order terminal in the break room.',
   snoop: 'A guest wandered into a staff-only area! Walk up to them and press E to escort them out before they cause trouble.',
   elevator: 'Some jobs are upstairs. Take the elevator behind the lobby (press E at the call button), or the stairs at the west end of the hallway.',
   dnd: 'A red light by a door means DO NOT DISTURB: the guests are inside. Barge in and they will hate you for it. Clean that room once they head out.',
@@ -48,6 +49,12 @@ const TIPS = {
   raccoon: 'A raccoon got in! Grab a mop and hold E on it to chase it out before it raids the trash and the stove.',
   vending: 'The vending machine by the elevators ate a guest\'s money. Hold E on the machine to give it a whack.',
   waypoint: 'The ◆ marker points at your most urgent job. Press R to cycle through jobs, G to ping a spot for your crew.',
+  welcome: 'You start in the break room. Read Mr. Harrow\'s letter on the corkboard (E), order upgrades at the terminal by the door, then head out into the hotel to open for the night.',
+  phone: 'The front desk phone is ringing. Guests call down for everything: answer it (E) to hear what they want. There is an extension in the Security Office.',
+  cellar: 'Somebody has gone down into the basement. The door is at the back of Storage, east end of the hallway. Take your flashlight.',
+  key: 'Mr. Harrow\'s brass key hangs on the porter\'s cart in the basement. Carry it to the iron door at the far end and hold E to lock it. Before dawn.',
+  cctv: 'Something is on the cameras. The monitors are in the Security Office (west end of the hall): sit down (E) and press the camera\'s number to flash it.',
+  mimic: 'There is no Room 000.',
 };
 
 export class Hud {
@@ -91,7 +98,7 @@ export class Hud {
     this.lastPrompt = key;
     const el = $('prompt');
     if (!text) { el.classList.remove('on'); return; }
-    const k = type === 'hold' ? '<b>Hold E</b>' : type === 'press' || type === 'desk' || type === 'elevator' ? '<b>E</b>' : '';
+    const k = type === 'hold' ? '<b>Hold E</b>' : type === 'press' || type === 'desk' || type === 'elevator' || type === 'ui' ? '<b>E</b>' : '';
     el.innerHTML = `${k} ${esc(text)}`;
     el.classList.toggle('info', type === 'info' || !type);
     el.classList.add('on');
@@ -233,11 +240,11 @@ export class Hud {
     if (snap.ph !== this.phase) this.onPhase(snap.ph, snap);
     const inShift = snap.ph === 'shift';
     document.body.classList.toggle('calm', !!ctx.calm);
-    $('shift-name').textContent = inShift ? `Shift ${snap.rd} · ${snap.ttl}` : snap.ph === 'lobby' ? 'Before opening' : `Shift ${snap.rd}`;
+    $('shift-name').textContent = inShift ? `Shift ${snap.rd} · ${snap.ttl}` : snap.ph === 'lobby' ? 'Before opening' : snap.ph === 'break' ? 'Between shifts' : `Shift ${snap.rd}`;
     $('clock').textContent = inShift ? fmtClock(snap.H) : fmtClock(15);
-    $('phase-label').textContent = inShift ? (snap.cl ? 'Closing up' : phaseLabel(snap.H)) : snap.ph === 'lobby' ? 'Explore the hotel' : '';
+    $('phase-label').textContent = inShift ? (snap.cl ? 'Closing up' : phaseLabel(snap.H)) : snap.ph === 'lobby' || snap.ph === 'break' ? 'On your break' : '';
     $('closing').classList.toggle('on', inShift && !!snap.cl);
-    if (inShift && snap.cl) $('closing').innerHTML = `🔔 <b>CLOSING UP</b> · the shift ends when every job is done · <b>${snap.cl.n}</b> left · corporate's cleaners in ${Math.floor(snap.cl.t / 60)}:${String(snap.cl.t % 60).padStart(2, '0')}`;
+    if (inShift && snap.cl) $('closing').innerHTML = `🔔 <b>CLOSING UP</b> · the shift ends when every job is done · <b>${snap.cl.n}</b> left · the day crew in ${Math.floor(snap.cl.t / 60)}:${String(snap.cl.t % 60).padStart(2, '0')}`;
     $('timeline').classList.toggle('hidden', !inShift);
     if (inShift) $('tl-now').style.left = `${clamp((snap.H - 15) / 21, 0, 1) * 100}%`;
     $('power').classList.toggle('on', !snap.pw);
@@ -277,11 +284,14 @@ export class Hud {
     if (this.deskOpen) this.renderDesk(snap.dk, snap);
 
     let hint = '';
-    if (snap.ph === 'lobby' || snap.ph === 'shop') hint = ctx.isHost ? 'Press <b>Tab</b> for the Manager\'s Office · <b>Enter</b> to start the shift' : 'Press <b>Tab</b> for the Manager\'s Office · waiting for the host to start';
+    if ((snap.ph === 'lobby' || snap.ph === 'break') && ctx.isHost && snap.np > 1) hint = 'Host: <b>Enter</b> starts the shift without waiting for everyone';
     if (inShift && !ctx.locked && !this.overlay) hint = 'Click to resume';
     $('hint').innerHTML = hint;
 
     if (inShift) this.autoTips(snap);
+    else if (snap.ph === 'lobby') this.tip('welcome');
+    this.breakStatus(snap, ctx);
+    this.setOut(inShift && ctx.out, ctx.watching);
     this.tipT -= dt;
     if (this.tipT <= 0 && this.tipQueue.length) { this.tipT = 9; $('tip').textContent = this.tipQueue.shift(); $('tip').classList.add('on'); }
     else if (this.tipT <= 0) $('tip').classList.remove('on');
@@ -353,7 +363,10 @@ export class Hud {
     if (ics.has('🚷')) this.tip('snoop');
     if (snap.tk.some(t => L.floorOf(t.x) > 0)) this.tip('elevator');
     if (snap.rm.some(st => st[1])) this.tip('dnd');
-    for (const [ic, tip] of [['🤕', 'slip'], ['😰', 'lostkid'], ['🚪', 'lockout'], ['🥴', 'drunk'], ['🛗', 'stuck'], ['🦝', 'raccoon'], ['🥤', 'vending']]) if (ics.has(ic)) this.tip(tip);
+    for (const [ic, tip] of [['🤕', 'slip'], ['😰', 'lostkid'], ['🥴', 'drunk'], ['🛗', 'stuck'], ['🦝', 'raccoon'], ['🥤', 'vending'], ['☎️', 'phone'], ['🗝️', 'key'], ['📺', 'cctv']]) if (ics.has(ic)) this.tip(tip);
+    if (snap.tk.some(t => t.ic === '🚪' && t.tx.includes('locked out'))) this.tip('lockout');
+    if (snap.tk.some(t => t.ic === '🚪' && t.tx.includes('basement'))) this.tip('cellar');
+    if (snap.tk.some(t => t.tx === 'Luggage → Room 000')) this.tip('mimic');
   }
 
   // Jobs that still need a person come first; a 🤖 tag marks ones a helper is already doing.
@@ -363,7 +376,7 @@ export class Hud {
     const myF = L.floorOf(ctx.pos.x);
     const where = t => {
       const f = L.floorOf(t.x);
-      return f === myF ? `${Math.round(Math.hypot(t.x - ctx.pos.x, t.z - ctx.pos.z))}m` : `${f > myF ? '↑' : '↓'} ${L.FLOORS[f].short}`;
+      return f === myF ? `${Math.round(Math.hypot(t.x - ctx.pos.x, t.z - ctx.pos.z))}m` : `${L.levelY(f) > L.levelY(myF) ? '↑' : '↓'} ${L.floorShort(f)}`;
     };
     const tracked = this.trackedTask(snap);
     const key = list.map(t => t.ic + t.tx + t.t + where(t).replace(/\d+m/, m => Math.round(parseInt(m, 10) / 4)) + (t === tracked ? '*' : '')).join('|');
@@ -387,13 +400,15 @@ export class Hud {
   // The ◆ marker floats over the tracked job, or hugs the screen edge pointing toward it.
   updateWaypoint(snap, ctx) {
     const el = $('waypoint');
-    const t = this.trackedTask(snap);
+    const mine = snap.brk && snap.brk.v.includes(ctx.me);
+    const t = snap.brk ? (mine ? { ic: '🚪', tx: 'back to work', x: 24, z: -19.6 } : { ic: '☕', tx: 'break room', x: 25, z: -15.5 }) : this.trackedTask(snap);
     if (!t || !ctx.camera || this.overlay) { el.classList.remove('on'); return; }
     const k = t.ic + t.tx;
     if (k !== this.trackKey) { this.trackKey = k; el.querySelector('.wp-ic').textContent = t.ic; }
     const tf = L.floorOf(t.x), myF = L.floorOf(ctx.pos.x);
     const d = Math.hypot(t.x - ctx.pos.x, t.z - ctx.pos.z);
-    el.querySelector('.wp-d').textContent = tf !== myF ? `${tf > myF ? '↑' : '↓'} ${L.FLOORS[tf].short} · ${L.FLAGS.elev_out ? 'stairs' : 'stairs or elevator'}` : d < 2.5 ? 'here' : `${Math.round(d)}m`;
+    const route = tf === L.BASEMENT_F || myF === L.BASEMENT_F ? 'basement door, Storage' : L.FLAGS.elev_out ? 'stairs' : 'stairs or elevator';
+    el.querySelector('.wp-d').textContent = tf !== myF ? `${L.levelY(tf) > L.levelY(myF) ? '↑' : '↓'} ${L.floorShort(tf)} · ${route}` : d < 2.5 ? 'here' : `${Math.round(d)}m`;
     const w = L.toWorld(t.x, t.z, 1.5);
     const v = this.v3.set(w.x, w.y, w.z).project(ctx.camera);
     const W = window.innerWidth, H = window.innerHeight;
@@ -477,11 +492,11 @@ export class Hud {
       }
       g.fillStyle = 'rgba(70,110,80,0.45)';
       for (const t of L.TREES) { g.beginPath(); g.arc(X(t.x), Z(t.z), PX * 1.2, 0, 7); g.fill(); }
-    } else { // the roofs below
+    } else if (f !== L.BASEMENT_F) { // the roofs below
       g.fillStyle = '#20232a';
       g.fillRect(X(L.BUILDING.x1 + o), Z(L.BUILDING.z1), (L.BUILDING.x2 - L.BUILDING.x1) * PX, (L.BUILDING.z2 - L.BUILDING.z1) * PX);
     }
-    const fill = { lobby: '#3b3226', dining: '#3a2a1e', kitchen: '#2e3236', laundry: '#2b3238', utility: '#262626', hall: '#3d1b20', elev: '#3d1b20', pool: '#1d4552', staff: '#25303a', storage: '#262626', linen: '#2b3238', closet: '#262626', lounge: '#4a2a18' };
+    const fill = { lobby: '#3b3226', dining: '#3a2a1e', kitchen: '#2e3236', laundry: '#2b3238', utility: '#262626', hall: '#3d1b20', elev: '#3d1b20', pool: '#1d4552', staff: '#25303a', storage: '#262626', linen: '#2b3238', closet: '#262626', lounge: '#4a2a18', office: '#26303a', basement: '#2a2622' };
     for (const z of L.ZONES) if (on(z.x1 + 1)) { g.fillStyle = fill[z.id] || '#333'; g.fillRect(X(z.x1), Z(z.z1), (z.x2 - z.x1) * PX, (z.z2 - z.z1) * PX); }
     for (const z of L.ZONES) if (on(z.x1 + 1) && L.STAFF_ZONES.has(z.id)) { // staff-only areas get a red hatch
       g.save(); g.beginPath(); g.rect(X(z.x1), Z(z.z1), (z.x2 - z.x1) * PX, (z.z2 - z.z1) * PX); g.clip();
@@ -512,7 +527,7 @@ export class Hud {
       for (const z of L.ZONES) {
         if (!on(z.x1 + 1) || seen.has(z.name) || z.id === 'elev') continue;
         seen.add(z.name);
-        const label = z.id === 'utility' ? 'UTILITY ⚡' : z.name.replace(/^(Second|Third) Floor /, '').toUpperCase();
+        const label = z.id === 'office' ? 'SECURITY 📺' : z.name.replace(/^(Second|Third) Floor /, '').toUpperCase();
         g.fillText(label, X((z.x1 + z.x2) / 2), Z((z.z1 + z.z2) / 2) + (z.id === 'pool' ? PX * 5 : 0));
       }
       if (f === 0) {
@@ -521,9 +536,11 @@ export class Hud {
         g.fillText('FRONT DESK', X(6), Z(-9.2));
         g.fillText('SUPPLIES', X(-6.5), Z(-9.6));
         g.fillText('HEDGE MAZE', X(-53), Z(-10.5));
-      } else g.fillText('ROOF', X(o), Z(-1));
+        g.fillText('BREAKER ⚡', X(0), Z(-32));
+      } else if (f !== L.BASEMENT_F) g.fillText('ROOF', X(o), Z(-1));
       if (f === 1) g.fillText('PRESIDENTIAL', X(25 + o), Z(-20));
-      g.fillText('ELEVATOR', X(o), Z(-27.5));
+      if (f !== L.BASEMENT_F) g.fillText('ELEVATOR', X(o), Z(-27.5));
+      else g.fillText('IRON DOOR', X(o + 8.5), Z(-22.6));
     }
     g.fillStyle = 'rgba(255,255,255,0.8)';
     g.font = `bold ${labels ? 12 : 16}px sans-serif`;
@@ -605,11 +622,82 @@ export class Hud {
     g.font = `bold ${big ? 18 : 11}px sans-serif`;
     g.textAlign = 'left';
     g.fillStyle = 'rgba(0,0,0,0.55)';
-    const label = `${L.FLOORS[f].name}${Object.entries(elsewhere).map(([tf, n]) => ` · ${L.FLOORS[tf].short}: ${n}`).join('')}`;
+    const label = `${L.floorName(f)}${Object.entries(elsewhere).map(([tf, n]) => ` · ${L.floorShort(+tf)}: ${n}`).join('')}`;
     const tw = g.measureText(label).width;
     g.fillRect(big ? 8 : MINI / 2 - tw / 2 - 5, big ? 8 : 14, tw + 10, big ? 26 : 16);
     g.fillStyle = '#f3e6c4';
     g.fillText(label, big ? 13 : MINI / 2 - tw / 2, big ? 21 : 22);
+  }
+
+  // ---------- the story and the night ----------
+  // A telephone line, read out at the bottom of the screen for everyone.
+  call(who, tx, by, eerie) {
+    const el = $('call');
+    el.className = eerie ? 'eerie on' : 'on';
+    el.innerHTML = `<div class="call-who">📞 ${esc(who)}${by ? ` <small>· ${esc(by)} picked up</small>` : ''}</div><div class="call-tx">“${esc(tx)}”</div>`;
+    clearTimeout(this.callTimer);
+    this.callTimer = setTimeout(() => el.classList.remove('on'), Math.min(15000, 4500 + tx.length * 55));
+  }
+
+  // Taken: out for the rest of the shift, watching through somebody else's eyes.
+  taken(why) { this.outWhy = why; }
+  setOut(out, watching) {
+    const key = out ? `${this.outWhy}|${watching || ''}` : '';
+    if (key === this.outKey) return;
+    this.outKey = key;
+    const el = $('taken');
+    el.classList.toggle('on', !!out);
+    const why = { mimic: 'The suitcase had teeth.', static: 'The static swallowed you.', caught: 'It caught you.' }[this.outWhy] || 'You were taken.';
+    if (out) el.innerHTML = `<div>💀 ${why}</div><small>You're out for the rest of the shift.${watching ? ` Watching ${esc(watching)} · click to watch someone else` : ' There is nobody left to watch.'}</small>`;
+  }
+
+  // Mr. Harrow's letter on the break room corkboard, for the shift about to start.
+  showLetter(round) {
+    const lt = round >= 1 && round <= LETTERS.length ? LETTERS[round - 1] : OVERTIME_LETTER;
+    this.openOverlay('letter');
+    $('screen').innerHTML = `<div class="card letter"><div class="letter-head">THE LAST RESORT · EST. 1926 · FROM THE DESK OF S. HARROW</div>
+      <h1>${esc(lt.title)}</h1>${lt.body.map(p => `<p>${esc(p)}</p>`).join('')}<div class="sign">— S. Harrow, Proprietor</div>
+      <div class="btns"><button class="go" data-act="close">Pin it back up</button></div></div>`;
+    $('screen').querySelector('[data-act=close]').onclick = () => { this.closeOverlay(); this.h.resume?.(); };
+  }
+
+  // The last page of the 1926 register, on the desk in the basement.
+  showLedger() {
+    this.openOverlay('letter');
+    $('screen').innerHTML = `<div class="card letter ledger"><div class="letter-head">HOTEL REGISTER · 1926</div>
+      ${LEDGER.map(p => `<p>${esc(p)}</p>`).join('')}
+      <div class="btns"><button class="go" data-act="close">Close the book</button></div></div>`;
+    $('screen').querySelector('[data-act=close]').onclick = () => { this.closeOverlay(); this.h.resume?.(); };
+  }
+
+  // The security monitors: four camera feeds (drawn by main underneath), labels and the flash buttons.
+  showCCTV(cams, page, pages, live) {
+    const el = $('cctv');
+    el.classList.remove('hidden');
+    el.innerHTML = `<div class="cctv-grid">${cams.map((c, i) => `<div class="cam ${c ? '' : 'none'} ${live ? '' : 'dead'}"><span class="cam-n">CAM ${page * 4 + i + 1}</span><span class="cam-name">${c ? esc(c.name) : '—'}</span><span class="cam-rec">● REC</span>${c ? `<span class="cam-key"><b>${i + 1}</b> flash</span>` : ''}${live ? '' : '<span class="cam-off">NO SIGNAL</span>'}<div class="cam-flash"></div></div>`).join('')}</div>
+      <div class="cctv-foot">SECURITY OFFICE · cameras ${page + 1}/${pages} · <b>A</b>/<b>D</b> switch · <b>1</b>–<b>4</b> flash a camera · <b>E</b> stand up</div>`;
+  }
+  hideCCTV() { $('cctv').classList.add('hidden'); }
+  cctvFlash(i, hit) {
+    const f = $('cctv').querySelectorAll('.cam-flash')[i];
+    if (!f) return;
+    f.classList.toggle('hit', !!hit);
+    f.classList.remove('on');
+    void f.offsetWidth;
+    f.classList.add('on');
+  }
+
+  // Between shifts: who still has to clock out in the break room before the next shift can start.
+  breakStatus(snap, ctx) {
+    const b = snap.brk;
+    const el = $('objective');
+    if (!b || this.overlay) { el.classList.remove('on'); return; }
+    const visited = new Set(b.v), mine = visited.has(ctx.me);
+    const crew = snap.pl.map(p => `<span class="${visited.has(p.i) ? 'ok' : ''}">${visited.has(p.i) ? '✓' : '○'} ${esc(p.n)}</span>`).join(' ');
+    const what = mine ? `Head back out into the hotel to start <b>Shift ${b.r}</b>` : 'Clock out in the <b>Break Room</b> (east end of the hallway)';
+    const key = what + crew;
+    el.classList.add('on');
+    if (key !== this.objKey) { this.objKey = key; el.innerHTML = `<div>☕ ${what}</div><div class="crew">${crew}</div>`; }
   }
 
   // ---------- overlays ----------
@@ -617,7 +705,7 @@ export class Hud {
     const prev = this.phase;
     this.phase = ph;
     this.closeDesk();
-    if (ph === 'lobby' || ph === 'shop') this.openOverlay('office');
+    if (ph === 'lobby' || ph === 'break') this.closeOverlay();
     else if (ph === 'results') this.openOverlay('results');
     else if (ph === 'gameover') this.openOverlay('gameover');
     else if (ph === 'victory') this.openOverlay('victory');
@@ -642,9 +730,8 @@ export class Hud {
     this.h.onOverlay?.(false);
   }
 
-  toggleOffice() {
-    if (this.overlay === 'office') this.closeOverlay();
-    else if (this.phase === 'lobby' || this.phase === 'shop') this.openOverlay('office');
+  openTerminal() {
+    if (this.phase === 'lobby' || this.phase === 'break') this.openOverlay('office');
   }
 
   refreshOffice(snap, ctx) {
@@ -660,15 +747,15 @@ export class Hud {
     $('screen').innerHTML = `
       <div class="card office">
         <div class="office-head">
-          <div><h1>Manager's Office</h1><div class="sub">${snap.ph === 'lobby' ? 'Welcome to The Last Resort. The previous staff... moved on.' : 'Shift survived. Corporate sends its regards (and money).'}</div></div>
+          <div><h1>Order Terminal</h1><div class="sub">${snap.ph === 'lobby' ? 'Mr. Harrow\'s budget for the season. The previous staff... moved on.' : 'Shift survived. Mr. Harrow has topped up the budget. He reads every receipt.'}</div></div>
           <div class="cash"><small>BUDGET</small>$${snap.mo}</div>
         </div>
         <div class="next">${next ? `Next: <b>Shift ${snap.rd + 1} — ${esc(next.title)}</b> · ${esc(next.clientele)} · target <b>★ ${target.toFixed(2)}</b>` : 'Next: <b>Overtime</b> — everyone, all at once.'} <span class="diff-tag">${esc(PRESETS[snap.st?.preset]?.name || 'Custom')} · ${snap.np || 1} staff</span></div>
         <div class="tabs">${tabs.map(([id, label]) => `<button class="${this.officeTab === id ? 'on' : ''}" data-tab="${id}">${label}</button>`).join('')}</div>
         <div class="tab-body">${body}</div>
         <div class="btns">
-          <button class="ghost" data-act="close">Back to the hotel</button>
-          ${ctx.isHost ? `<button class="go" data-act="start">Open the doors — start Shift ${snap.rd + 1}</button>` : '<div class="wait">Waiting for the host to start the shift…</div>'}
+          <button class="go" data-act="close">Done</button>
+          <div class="wait">Shift ${snap.brk?.r || snap.rd + 1} starts once everyone has clocked out here and walked back out.</div>
         </div>
       </div>`;
     const root = $('screen');
@@ -769,7 +856,7 @@ export class Hud {
 
   officeDiff(snap, ctx) {
     const st = snap.st || {};
-    const editable = ctx.isHost && ['lobby', 'shop', 'gameover', 'victory'].includes(snap.ph);
+    const editable = ctx.isHost && ['lobby', 'break', 'gameover', 'victory'].includes(snap.ph);
     const np = Math.max(1, snap.np || 1);
     const D = difficulty(st, np);
     const presets = Object.entries(PRESETS).map(([id, p]) => `<button class="preset ${st.preset === id ? 'on' : ''}" ${editable ? `data-preset="${id}"` : 'disabled'}><b>${esc(p.name)}</b><small>${esc(p.desc)}</small></button>`).join('');
@@ -814,14 +901,16 @@ export class Hud {
       head = `<h1>${r.passed ? 'Shift survived' : 'Shift failed'}</h1><div class="sub">Shift ${r.round}: ${esc(r.title)}</div>
         <div class="bigstars">${starHtml(0, true)}<span id="res-num">0.00</span></div>
         <div class="verdict ${r.passed ? 'pass' : 'fail'}">${r.passed ? 'PASSED' : 'BELOW TARGET'} <small>needed ★ ${r.threshold.toFixed(2)}</small></div>
-        <div class="money-row">Room revenue & tips: <b>$${r.revenue}</b>${r.passed ? ` · Corporate bonus: <b>$${r.bonus}</b>` : ''}</div>
+        <div class="money-row">Room revenue & tips: <b>${r.revenue}</b>${r.passed ? ` · Mr. Harrow's bonus: <b>${r.bonus}</b>` : ''}</div>
         <div class="chips center">${chips}</div>`;
       btns = ctx.isHost ? '<button class="go" data-cmd="continue">Continue</button>' : '<div class="wait">Waiting for the host…</div>';
     } else if (this.overlay === 'gameover') {
-      head = `<h1>Shut down</h1><div class="sub">The rating fell to ★ ${r.avg.toFixed(2)} (needed ★ ${r.threshold.toFixed(2)}). Corporate has closed The Last Resort.</div><div class="chips center">${chips}</div>`;
+      head = r.doom ? `<h1>Checkout is forever</h1><div class="sub">Dawn came and the iron door was still open. The Last Resort has a new tenant, and it has room for all of you.</div><div class="chips center">${chips}</div>`
+        : r.wiped ? `<h1>Nobody clocked out</h1><div class="sub">Every one of you was taken before dawn. Mr. Harrow will be hiring again.</div><div class="chips center">${chips}</div>`
+          : `<h1>Let go</h1><div class="sub">The rating fell to ★ ${r.avg.toFixed(2)} (needed ★ ${r.threshold.toFixed(2)}). Mr. Harrow has found new staff. Something has to keep the rooms full.</div><div class="chips center">${chips}</div>`;
       btns = (ctx.isHost ? '<button class="go" data-cmd="retry">Retry the shift</button><button class="ghost" data-cmd="newgame">New game</button>' : '<div class="wait">Waiting for the host…</div>') + '<button class="ghost" data-act="leave">Main menu</button>';
     } else {
-      head = `<h1>You survived The Last Resort</h1><div class="sub">Seven shifts. Countless towels. The hotel is the highest-rated stop on the highway — in this world and the next.</div><div class="bigstars">${starHtml(r.avg)}<span>${r.avg.toFixed(2)}</span></div>`;
+      head = `<h1>You survived The Last Resort</h1>${EPILOGUE.map(t => `<div class="sub">${esc(t)}</div>`).join('')}<div class="sub">— S. Harrow</div><div class="bigstars">${starHtml(r.avg)}<span>${r.avg.toFixed(2)}</span></div>`;
       btns = (ctx.isHost ? '<button class="go" data-cmd="endless">Keep going: Overtime</button><button class="ghost" data-cmd="newgame">New game</button>' : '<div class="wait">Waiting for the host…</div>') + '<button class="ghost" data-act="leave">Main menu</button>';
     }
     $('screen').innerHTML = `<div class="card results">${head}<div class="surveys">${surveys || '<div class="rs">No reviews.</div>'}</div><div class="btns">${btns}</div></div>`;
@@ -869,7 +958,7 @@ export class Hud {
 
 export const CONTROLS = `<div><b>WASD</b> move · <b>Shift</b> sprint · <b>Space</b> jump</div>
 <div><b>E</b> / <b>Left click</b> interact (hold for chores) · <b>Q</b> drop · <b>Right click</b> throw</div>
-<div><b>F</b> flashlight · <b>G</b> ping a spot · <b>R</b> next waypoint · <b>M</b> map · <b>T</b> chat · <b>Tab</b> office · <b>Esc</b> pause</div>
+<div><b>F</b> flashlight · <b>G</b> ping a spot · <b>R</b> next waypoint · <b>M</b> map · <b>T</b> chat · <b>Esc</b> pause</div>
 <div>At the desk: <b>1</b> Standard · <b>2</b> Suite · <b>3</b> Presidential · <b>X</b> turn away (check-out: <b>1</b>)</div>`;
 
 function phaseLabel(H) {

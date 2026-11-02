@@ -15,16 +15,47 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
   let travel = 0, extra = 0;
   let cd = 0;
 
+  // Somewhere a monster is (or a suitcase that might be one): the bot won't walk into it, and skips
+  // whatever it meant to do there this turn. A stunned monster is no danger for a few seconds.
+  let balked = false, flashed = false, flashing = null, flashT = 0;
+  const danger = (x, z) => Object.values(sim.monsters).find(m => m.k !== 'raccoon' && !m.glimpse && !(m.stun > 0) && !(m.k === 'static' && m.cool > 0) && L.floorOf(m.x) === L.floorOf(x) && Math.hypot(m.x - x, m.z - z) < (m.disguised ? 2.2 : 3.2));
   const act = a => {
+    if (balked) return;
     if (a.a === 'clean') {
       const m = sim.messes[a.id];
       if (m) extra += cleanTime(m.t, sim.upgrades);
     }
     sim.handleAction(pid, a);
   };
+  // Walking distance through the building. Floors sit 1000 m apart in the simulation, so measure in the
+  // building's own coordinates and add the stairs.
+  const walk = (x, z, p) => {
+    const fa = L.floorOf(p.x), fb = L.floorOf(x);
+    return Math.hypot((x - fb * L.FLOOR_DX) - (p.x - fa * L.FLOOR_DX), z - p.z) + Math.abs(L.levelY(fb) - L.levelY(fa)) * 4;
+  };
+  // A shade or the Night Porter standing where the bot needs to be: get within a few metres, in plain
+  // sight of it, and hold the flashlight on it until it reels, the way a person would.
+  const flashAt = m => {
+    const p0 = pl(), f = L.floorOf(m.x);
+    const spots = Object.values(L.NODES).filter(n => {
+      if (L.floorOf(n.x) !== f || !L.isActive(n)) return false;
+      const d = Math.hypot(n.x - m.x, n.z - m.z);
+      return d > 4 && d < 9 && L.clearSight(n.x, n.z, m.x, m.z);
+    });
+    const n = spots.sort((a, b) => walk(a.x, a.z, p0) - walk(b.x, b.z, p0))[0];
+    if (!n) return;
+    travel += walk(n.x, n.z, p0) * 1.35;
+    extra += 1.5;
+    const dx = m.x - n.x, dz = m.z - n.z;
+    sim.setPose(pid, { x: n.x, y: 0, z: n.z, yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(-0.2, Math.hypot(dx, dz)), fl: true });
+    if (flashing !== m.id) { flashing = m.id; flashT = 2.5; }
+    flashed = true;
+  };
   const go = (x, z, mul = 1) => {
+    const m = danger(x, z);
+    if (m) { if (!balked && (m.k === 'shade' || m.k === 'porter')) flashAt(m); balked = true; return; }
     const p = pl();
-    travel += Math.hypot(x - p.x, z - p.z) * 1.35 * mul;
+    travel += walk(x, z, p) * 1.35 * mul;
     sim.setPose(pid, { x, y: 0, z, yaw: 0, pitch: 0, fl: true });
   };
   const held = () => { const p = pl(); return p.held ? sim.items[p.held] : null; };
@@ -107,8 +138,44 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
     return false;
   }
 
+  // The story's jobs: the CEO in the basement (shift 4) and the brass key for the iron door (shift 7).
+  function story() {
+    const f = sim.story.finale;
+    if (f && f.stage !== 'sealed') {
+      if (held()?.t === 'oldkey') { const st = L.STATIONS.bsm_iron; go(st.x + 1, st.z, 1.5); extra += 4; act({ a: 'station', s: 'bsm_iron' }); return true; }
+      const key = Object.values(sim.items).find(it => it.t === 'oldkey' && !it.holder);
+      if (key) { drop(); go(key.x, key.z + 0.6, 1.5); act({ a: 'pickup', id: key.id }); return true; }
+    }
+    const r = sim.story.rescue, g = r && !r.done && !r.follow && sim.guests[r.g];
+    if (g && g.st === 'entranced') { drop(); go(g.x + 1, g.z, 1.5); extra += 1.5; act({ a: 'rouse', g: g.id }); return true; }
+    return false;
+  }
+
+  // Something that can take the bot right now: not a raccoon, a glimpse, a suitcase that hasn't moved, a stunned
+  // monster, the Static while it recovers, or whatever the bot is holding its flashlight on.
+  const threat = m => m.k !== 'raccoon' && !m.disguised && !m.glimpse && !(m.stun > 0) && !(m.k === 'static' && m.cool > 0) && m.id !== flashing;
+
+  // Monsters take you out for the rest of the shift: step away from anything that's coming.
+  function dodge() {
+    const p0 = pl(), f = L.floorOf(p0.x);
+    const near = Object.values(sim.monsters).find(m => threat(m) && L.floorOf(m.x) === f && Math.hypot(m.x - p0.x, m.z - p0.z) < 5);
+    if (!near) return false;
+    const spots = [[6, -8.2], [0, 4], [-20, 2], [20, -2], [0, -20], [-25, -14]].filter(([x, z]) => !danger(x, z) && Math.hypot(x - near.x, z - near.z) > 8);
+    const [x, z] = spots[0] || [6, -8.2];
+    travel += walk(x, z, p0) * 1.35;
+    sim.setPose(pid, { x, y: 0, z, yaw: 0, pitch: 0, fl: true });
+    return true;
+  }
+  // Mid-errand, a person notices something coming for them after a moment (about 0.8 s on average) and runs.
+  const hunted = () => {
+    const p0 = pl(), f = L.floorOf(p0.x);
+    return Object.values(sim.monsters).some(m => threat(m) && L.floorOf(m.x) === f && Math.hypot(m.x - p0.x, m.z - p0.z) < 6);
+  };
+
   function job() {
     const p0 = pl();
+    if (p0.out) return;
+    if (dodge()) return;
     if (p0.car) { // finish the drive
       const c = sim.cars[p0.car];
       if (!c) return;
@@ -134,7 +201,9 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
         return;
       }
     }
+    if (sim.calls.length) { const st = L.STATIONS.phone; go(st.x, st.z - 0.6); extra += 1; act({ a: 'station', s: 'phone' }); return; } // the phone is on the desk (no need to put anything down)
     if (lazy) return;
+    if (story()) return;
     if (!sim.power && mine('power')) { drop(); go(L.STATIONS.breaker.x, L.STATIONS.breaker.z); extra += 2.5; act({ a: 'station', s: 'breaker' }); return; }
     const snoop = sim.trespassers().filter(t => mine(`e${t.id}`)).sort((a, b) => dist(a) - dist(b))[0];
     if (snoop) { go(snoop.x, snoop.z); extra += 1; act({ a: 'escort', g: snoop.id }); return; }
@@ -237,10 +306,20 @@ export function makeBot(sim, pid, lazy, realistic = false, slow = 1) {
 
   return function tick(dt) {
     cd -= dt;
-    if (cd > 0 || pl().down > 0) return;
+    if ((flashT -= dt) <= 0) flashing = null;
+    if (pl().down > 0 || pl().out) return;
+    if (cd > 0 && realistic && hunted() && Math.random() < dt / 0.8) {
+      travel = 0;
+      if (dodge()) cd += (travel / 4.5 + 0.4) * slow; // the errand still has to be finished afterwards
+      return;
+    }
+    if (cd > 0) return;
     travel = 0;
     extra = 0;
+    balked = false;
+    flashed = false;
     job();
     cd = lazy ? 1.0 : realistic ? Math.max(0.3, travel / 4.5 + 0.4 + extra) * slow : 0.25;
+    if (flashed && realistic) cd = Math.max(0.3, travel / 4.5 + 1.5) * slow; // on with the job as soon as it reels
   };
 }

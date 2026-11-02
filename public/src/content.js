@@ -30,6 +30,7 @@ export const ITEMS = {
   extinguisher: { name: 'Fire Extinguisher', tool: true },
   medkit: { name: 'First Aid Kit', tool: true },
   keycard: { name: 'Spare Key Card' },
+  oldkey: { name: 'Brass Key' },
   dishes: { name: 'Dirty Dishes', heavy: 0.85 },
   body: { name: 'Body Bag', heavy: 0.55 },
 };
@@ -302,6 +303,9 @@ const BAD = {
   elevator: ['The elevator broke and I had to climb the stairs. With my knees.', 'Elevator out of order. Thirty-six stairs to my room. Legs: destroyed.'],
   raccoon: ['There was a RACCOON in the dining room.', 'Shared my breakfast with a raccoon. Not by choice.'],
   vending: ['The vending machine ate my money and nobody cared.'],
+  phone: ['Called the front desk. It rang and rang and rang.', 'Nobody answers the phone at this hotel. Nobody.'],
+  abandoned: ['The staff vanished in the middle of the night. We packed our own bags.', 'Every single employee disappeared. Every one.'],
+  cellar: ['Our boss went down to the basement for "team building." He came back... different.', 'Something in the basement talked to me. I am not coming back here.'],
   pool: ['The pool was a swamp.', 'Something brushed my leg in the pool. It was a sandwich.', 'Pool water had a texture.'],
   mess: ['The lobby looked like a crime scene. Hopefully not literally.', 'Sticky floors everywhere.', 'Someone threw up in the hallway and it stayed there.'],
   blackout: ['The power went out and stayed out.', 'Spent half the night in total darkness. Heard breathing.'],
@@ -428,9 +432,9 @@ export const SNOOP_SPOTS = [
   { node: 'kit_c', zone: 'Kitchen', mischief: 'kitchen' },
   { node: 'kit_w', zone: 'Kitchen', mischief: 'kitchen' },
   { node: 'laun_c', zone: 'Laundry', mischief: 'laundry' },
-  { node: 'util_c', zone: 'Utility Room', mischief: 'breaker' },
+  { node: 'util_c', zone: 'Security Office', mischief: 'monitors' },
   { node: 'stor_c', zone: 'Storage', mischief: 'basement' },
-  { node: 'staff_e', zone: 'Staff Room', mischief: 'snack' },
+  { node: 'staff_e', zone: 'Break Room', mischief: 'snack' },
   { node: 'desk_back', zone: 'Front Desk', mischief: 'tipjar' },
 ];
 
@@ -449,55 +453,159 @@ export const HELPERS = {
   doorman: { name: 'Doorman', job: 'greeting guests' },
 };
 
+// ---------- the story ----------
+// Mr. Harrow owns The Last Resort. Nobody has ever met him: he leaves a letter on the break room
+// corkboard before every shift and telephones the front desk when something goes wrong. Everything
+// in this hotel comes back to what his father sealed in the basement in 1926.
+export const OWNER = 'Mr. Harrow';
+// The letter waiting on the corkboard before each shift (LETTERS[0] before the first).
+export const LETTERS = [
+  {
+    title: 'Welcome to The Last Resort',
+    body: [
+      'My family has kept this hotel since 1926, and for the season it is yours to keep. The work is simple: check the guests in, keep them happy and check them out happier. Every one of them leaves a review. I read every one.',
+      'Three rules, and I will only say them once.',
+      'One: the guests come first. Two: keep the lights on. If the power fails, the breaker box is outside, round the back of the hotel. Three: the door at the back of Storage stays locked. It goes down to the basement. There is nothing down there but the old boiler, and the boiler is not your concern. Whatever you hear.',
+      'When you have read this, go out and open the doors.',
+    ],
+  },
+  {
+    title: 'A guest called Ambrose',
+    body: [
+      'Well done. The reviews were kind.',
+      'Tonight a gentleman has booked a room under the name of Ambrose. He stayed with us once before, a very long time ago. He will be polite. He will ask about the basement. Do not answer him, and if something on his card tells you to turn him away at the desk, trust it.',
+      'One more thing. If the telephone rings late at night and nobody is there, or somebody is whispering, that is the old line to Room 000. There is no Room 000. Put the receiver down.',
+    ],
+  },
+  {
+    title: 'The boiler',
+    body: [
+      'The boiler has been knocking again. You may hear it at night: slow and heavy, like footsteps in the hall. It is only the boiler.',
+      'If one of the children tells you there is a tall man in a red coat walking the halls, smile, give them a cookie and keep them in their room. Do not follow him. Do not let him follow you. He does not like the light.',
+    ],
+  },
+  {
+    title: 'The man in the red coat',
+    body: [
+      'I owe you the truth about him. His name was Grimsby. He was my father\'s night porter. In the winter of 1926 he went down to see to the boiler, and when he came back up he was not Grimsby any more. He still does his rounds.',
+      'Tonight, a corporate party. Their Mr. Brockman has written to ask for "exclusive access to the lower level for a team-building exercise." The answer is no. The basement stays locked. I have checked the lock myself.',
+      'Also: we have more luggage than guests lately. If a suitcase is tagged for Room 000, do not pick it up.',
+    ],
+  },
+  {
+    title: 'The signal',
+    body: [
+      'Thank you for bringing Mr. Brockman back up. Whatever he says he saw down there, he did not see it.',
+      'Our visitors tonight say they followed a signal across a very great distance. It comes from beneath this hotel. I had hoped it would sleep for another hundred years.',
+      'Something has got into the security cameras, too. My father called it the Static. You cannot see it with your own eyes, only on the monitors in the Security Office, at the west end of the hall. If you see it on a screen, flash that camera before it reaches anyone.',
+    ],
+  },
+  {
+    title: 'Room 000',
+    body: [
+      'The book club have written ahead to ask for the basement key. Under no circumstances.',
+      'You deserve to know what is down there. On the night of March 3rd, 1926, my father wrote this in the hotel register: "Room 000. The Tenant. Paid in full. Indefinitely." The hotel was built on top of it. While the rooms are full and the guests are happy, it sleeps. That is why the reviews matter. That is why I read every one.',
+      'The guests coming tonight would very much like to wake it.',
+    ],
+  },
+  {
+    title: 'Before dawn',
+    body: [
+      'It is stirring. The guests from 1926 are coming back to see it. They never really checked out.',
+      'If it wakes, there is one thing that ever put it back to sleep: my father\'s brass key. It hangs on the old porter\'s cart in the basement. Someone will have to take it to the iron door at the bottom of the hotel and lock it, from this side, before dawn.',
+      'I am sorry. I should have told you everything on the first day. I hope you will not need any of this.',
+    ],
+  },
+];
+export const OVERTIME_LETTER = {
+  title: 'Overtime',
+  body: ['The rooms are full again and it sleeps. Keep it that way.', 'The pay is the same. The hours are worse. The reviews still matter.'],
+};
+export const EPILOGUE = [
+  'The iron door is locked. The Tenant sleeps. The guests from 1926 have finally checked out.',
+  'You did what my father never could. The Last Resort is yours now, if you want it. Someone will always have to keep the rooms full.',
+];
+// What Mr. Harrow says when he calls the front desk.
+export const CALLS = {
+  welcome: 'Mr. Harrow here. Just seeing how my new staff are settling in. The door at the back of Storage stays locked, yes? Good night.',
+  porter: 'Is the boiler knocking? Then he is up and about. Keep the lights on, keep the children in their rooms, and do not follow him.',
+  downThere: 'The basement door is open. Mr. Brockman went down there. Get him out before it notices him. Take a flashlight. Hurry.',
+  rescued: 'You brought him up? Good. Whatever he says he saw down there, he did not see it. The door will lock behind you.',
+  lostDown: 'He did not come back up, did he. Lock the door. Do not go looking.',
+  static: 'Look at the cameras. The monitors in the Security Office. If you see it on a screen, flash that camera before it reaches anybody.',
+  cult: 'The book club keeps asking about the basement. They have chalk and candles. Keep them away from that door.',
+  awakening: 'It is awake. I am so sorry. My father\'s brass key hangs on the porter\'s cart in the basement. Take it to the iron door and lock it. Before dawn. Before it comes up.',
+  sealed: '...It is quiet. It is finally quiet. You did it. Come back up now. Come back up.',
+};
+// The old line to Room 000.
+export const WHISPERS = [
+  '...hello? Is somebody there? It is so dark down here...',
+  '...the porter said I could leave once all the rooms were full...',
+  '...let me out. Let me out. LET ME OUT...',
+  '...I can hear you breathing.',
+  '...your room is ready. Room 000. It has always been ready.',
+  '...knock knock. Who is there? Who is there? Who is there?',
+];
+// The last page of the 1926 register, on the desk in the basement.
+export const LEDGER = [
+  'March 1st, 1926. Mr. & Mrs. Vanderholt, Room 104. Colonel Ashby, Room 109. Miss Dorothy Lark, Room 112.',
+  'March 2nd. Boiler knocking all night. Sent Grimsby down.',
+  'March 3rd. Room 000. The Tenant. Paid in full. Indefinitely.',
+  'March 4th. Grimsby came back up. He will not speak. The guests are asking for him and he only smiles.',
+  'March 5th. The Vanderholts, the Colonel and Miss Lark did not come down for breakfast. Their rooms are empty and their beds are made. I have locked the iron door. God help whoever opens it.',
+];
+
 // ---------- shifts ----------
-// Horror starts on the first night (something at the end of a hallway) and gets real from the second.
+// One season, one story: something under the hotel wakes a little more every night. Horror starts on
+// the first night and the basement opens on the fourth.
 export const ROUNDS = [
   {
     title: 'Grand Opening', clientele: 'Regular folks',
-    blurb: 'Ski weekends, business trips, a couple of retirees. The road up the mountain closes after dark. What could possibly go wrong?',
+    blurb: 'Ski weekends, business trips, a couple of retirees. The road up the mountain closes after dark. Mr. Harrow has left you three rules.',
     threshold: 2.75, count: 9, mix: { business: 3, couple: 3, tourist: 2, retiree: 2, influencer: 0.6 }, horror: 0.3,
-    events: [{ h: 23.4, type: 'flicker', d: 2.5 }, { h: 25.4, type: 'glimpse' }],
+    events: [{ h: 21.6, type: 'call', line: 'welcome' }, { h: 23.4, type: 'flicker', d: 2.5 }, { h: 25.4, type: 'glimpse' }],
   },
   {
     title: 'The Quiet Guest', clientele: 'Regular folks... mostly',
-    blurb: 'Someone booked a room and asked for extra plastic sheeting. Read the check-in cards carefully.',
+    blurb: 'A man named Ambrose has booked a room and asked for extra plastic sheeting. He will ask about the basement. Read the check-in cards carefully.',
     threshold: 3.0, count: 10, mix: { business: 3, couple: 3, tourist: 2, retiree: 2, influencer: 1 }, horror: 0.5,
     specials: [{ kind: 'killer', h: 16.6 }],
-    events: [{ h: 22.5, type: 'flicker', d: 3 }, { h: 23.6, type: 'glimpse' }, { h: 25.0, type: 'murder' }, { h: 27.4, type: 'blackout' }],
+    events: [{ h: 22.5, type: 'flicker', d: 3 }, { h: 23.6, type: 'glimpse' }, { h: 25.0, type: 'murder' }, { h: 26.2, type: 'room000' }, { h: 27.4, type: 'blackout' }],
   },
   {
     title: 'Family Reunion', clientele: 'Big families',
-    blurb: 'Sticky mittens, loud voices and forty-one cousins snowed in together. The pool will never be the same. Nobody has been down to the basement in years.',
+    blurb: 'Sticky mittens, loud voices and forty-one cousins snowed in together. The boiler has started knocking, slow and heavy, like footsteps.',
     threshold: 3.0, count: 7, mix: { family: 5, couple: 1, retiree: 2 }, horror: 0.6,
-    events: [{ h: 23.6, type: 'flicker', d: 3 }, { h: 24.4, type: 'stalker', until: 26.8 }, { h: 25.8, type: 'blackout' }],
+    events: [{ h: 23.6, type: 'flicker', d: 3 }, { h: 24.4, type: 'stalker', until: 26.8 }, { h: 25.0, type: 'call', line: 'porter' }, { h: 25.8, type: 'blackout' }, { h: 27.5, type: 'room000' }],
   },
   {
     title: 'Synergy Inc. Retreat', clientele: 'A work party',
-    blurb: 'A corporate retreat in the mountains. Open bar. Closed minds. Someone is definitely throwing up in the hallway, and something is walking it.',
+    blurb: 'A corporate retreat in the mountains. Open bar. Closed minds. Their CEO wants to see the basement, and tonight somebody leaves the door open.',
     threshold: 3.25, count: 11, mix: { office: 8, business: 2, couple: 1 }, horror: 0.65,
     specials: [{ kind: 'boss', h: 17.2 }],
-    events: [{ h: 23.4, type: 'stalker', until: 27.8 }, { h: 24.4, type: 'blackout' }, { h: 26.5, type: 'flicker', d: 4 }],
+    events: [{ h: 23.4, type: 'stalker', until: 27.8 }, { h: 23.9, type: 'mimic' }, { h: 24.4, type: 'blackout' }, { h: 25.3, type: 'downThere' }, { h: 26.5, type: 'flicker', d: 4 }],
   },
   {
     title: 'They Come in Peace', clientele: 'Visitors from "Ohio"',
-    blurb: 'A tour group with antennae has booked most of the hotel. It is already ten below outside. They want their rooms colder.',
+    blurb: 'A tour group with antennae followed a signal coming from beneath the hotel. And something has got into the security cameras.',
     threshold: 3.25, count: 10, mix: { alien: 7, tourist: 2, business: 1 }, horror: 0.7,
     specials: [{ kind: 'agent', h: 18.4 }],
-    events: [{ h: 23.0, type: 'flicker', d: 3 }, { h: 24.6, type: 'ufo' }, { h: 24.9, type: 'interrogate' }, { h: 25.6, type: 'stalker', until: 27.6 }, { h: 27.3, type: 'ufo' }],
+    events: [{ h: 23.0, type: 'flicker', d: 3 }, { h: 23.8, type: 'static', until: 29.4 }, { h: 24.0, type: 'call', line: 'static' }, { h: 24.6, type: 'ufo' }, { h: 24.9, type: 'interrogate' }, { h: 25.6, type: 'stalker', until: 27.6 }, { h: 26.4, type: 'room000' }, { h: 27.3, type: 'ufo' }],
   },
   {
     title: 'Midnight Society', clientele: 'Vampires & a "book club"',
-    blurb: 'Very pale guests who only check in after dark, and a club that brought a lot of chalk. Close the curtains before sunrise.',
+    blurb: 'Very pale guests who only check in after dark, and a club that brought a lot of chalk and wants the basement key. Close the curtains before sunrise.',
     threshold: 3.5, count: 10, mix: { vampire: 4, cultist: 4, couple: 2 }, horror: 0.85,
     specials: [{ kind: 'priest', h: 19.0 }],
-    events: [{ h: 23.5, type: 'circles' }, { h: 25.2, type: 'blackout' }, { h: 26.6, type: 'ritual' }, { h: 28.6, type: 'curtains' }, { h: 30.0, type: 'sunrise' }],
+    events: [{ h: 23.5, type: 'circles' }, { h: 24.1, type: 'static', until: 29 }, { h: 24.8, type: 'call', line: 'cult' }, { h: 25.2, type: 'blackout' }, { h: 25.6, type: 'mimic' }, { h: 26.6, type: 'ritual' }, { h: 28.6, type: 'curtains' }, { h: 30.0, type: 'sunrise' }],
   },
   {
     title: 'Checkout Is Forever', clientele: 'The hotel\'s oldest guests',
-    blurb: 'The blizzard has cut the phone lines. Guests from 1926. Guests who look exactly like other guests. And something has come up from the basement.',
-    threshold: 3.5, count: 11, mix: { ghost: 4, business: 2, couple: 2, family: 2, tourist: 1 }, horror: 1.0,
+    blurb: 'The blizzard has cut the roads. The guests from 1926 are back, guests who look exactly like other guests are checking in, and the thing in the basement is waking up.',
+    threshold: 3.25, count: 11, mix: { ghost: 4, business: 2, couple: 2, family: 2, tourist: 1 }, horror: 1.0, // lower: the door has to be locked too
     specials: [{ kind: 'doppel', h: 20.5 }, { kind: 'doppel', h: 22.6 }],
-    events: [{ h: 23.4, type: 'stalker', until: 29.6 }, { h: 24.6, type: 'blackout' }, { h: 26.0, type: 'replace' }, { h: 27.6, type: 'blackout' }],
+    events: [{ h: 23.4, type: 'stalker', until: 26.6 }, { h: 24.6, type: 'blackout' }, { h: 25.2, type: 'static', until: 29.6 }, { h: 26.0, type: 'replace' }, { h: 26.6, type: 'awakening' }], // the porter goes back down as everything else comes up
+    finale: true,
   },
 ];
 
@@ -519,9 +627,12 @@ export function endlessRound(n) {
   for (const k in b.mix) mix[k] = (mix[k] || 0) + b.mix[k];
   const events = [...(a.events || []), ...(b.events || []), { h: 24 + rand(0, 3), type: 'blackout' }];
   if (chance(0.6)) events.push({ h: 23.5, type: 'stalker', until: 29.5 });
+  if (chance(0.5)) events.push({ h: 24.5, type: 'mimic' });
+  if (chance(0.5)) events.push({ h: 24, type: 'static', until: 29 });
+  if (chance(0.5)) events.push({ h: 26, type: 'room000' });
   return {
     title: `Overtime #${n - ROUNDS.length}`, clientele: 'A bit of everything',
-    blurb: 'The hotel is famous now. Everyone wants a room. Everyone.',
+    blurb: 'The iron door is locked and the hotel is famous now. Everyone wants a room. Keep them full, and it sleeps.',
     threshold: Math.min(4.2, 3.5 + 0.1 * (n - ROUNDS.length)), count: 12, mix, horror: 1,
     specials: [...(a.specials || []), ...(b.specials || []), ...(chance(0.5) ? [{ kind: 'doppel', h: 21.5 }] : [])],
     events,
@@ -600,7 +711,7 @@ export const UPGRADES = [
     levels: [
       ['Squeaky Sneakers', 'Light on your feet. Loud in the hallways.'],
       ['Luggage Cart Wheels', 'Suitcases no longer slow you down, and guests wait longer for them.'],
-      ['Energy Drinks', 'A fridge full of them in the staff room. Stamina comes back much faster.'],
+      ['Energy Drinks', 'A fridge full of them in the break room. Stamina comes back much faster.'],
       ['Roller Skates', 'Sprinting is 25% faster.'],
       ['Marathon Training', 'You barely get winded.'],
     ],
@@ -611,7 +722,7 @@ export const UPGRADES = [
     cost: [350, 700, 1200, 1900, 2800],
     levels: [
       ['Backup Generator', 'Blackouts end by themselves after 20 seconds.'],
-      ['Security Cameras', 'Blood, bodies and anything you\'ve spotted show up on the map.'],
+      ['Security Cameras', 'Cameras upstairs too, and blood, bodies and anything you\'ve spotted show up on the map.'],
       ['Background Checks', 'Suspicious guests get a red FLAGGED stamp on their check-in card.'],
       ['Garlic & UV Lamps', 'Monsters are 30% slower and fade sooner, summoning circles charge slower, and vampires never bite.'],
       ['Salt Lines', 'Monsters cannot enter guest rooms. Hide in one!'],

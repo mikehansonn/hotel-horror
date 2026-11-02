@@ -1,12 +1,19 @@
 // Turns snapshots into moving meshes: guests, cars, items, messes, monsters, the UFO and teammates.
 import * as THREE from 'three';
 import * as L from './layout.js';
-import { buildCharacter, buildStaff, animateCharacter, buildItem, buildMess, buildCar, buildPorter, buildShade, buildRaccoon, animateRaccoon, buildUfo, disposeModel, buildHelper, animateHelper } from './models.js';
+import { buildCharacter, buildStaff, animateCharacter, buildItem, buildMess, buildCar, buildPorter, buildShade, buildRaccoon, animateRaccoon, buildMimic, animateMimic, buildStatic, scrambleStatic, buildUfo, disposeModel, buildHelper, animateHelper } from './models.js';
 import { makeLook } from './looks.js';
 import { emojiTexture, bubbleTexture, nameTexture, labelTexture } from './textures.js';
 import { PLAYER_COLORS, ITEMS, HELPERS } from './content.js';
 import { angleLerp } from './util.js';
 
+function mimicBag() {
+  const g = buildItem('luggage', { color: '#9a7446' });
+  const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.07), new THREE.MeshBasicMaterial({ map: labelTexture('000', { color: '#7a1010', bg: '#e8d29a', font: 'bold 52px Georgia, serif', h: 64 }).texture }));
+  tag.position.set(0.14, 0.5, 0.13);
+  g.add(tag);
+  return g;
+}
 const NPC_DOOR = 2.1; // squared distance at which a guest, robot or monster opens a door
 // Long-handled tools are held partway up the handle with the head down by the floor (their models stand
 // on the head). GRIP: how far up the handle a hand holds it. POLE (first person): where the hand is, which
@@ -116,6 +123,7 @@ export class View {
     this.syncItems(snap.it, ctx.me, dt);
     this.syncMesses(snap.m, dt);
     this.syncMonsters(snap.mn, dt);
+    this.updateStatic(dt);
     this.syncUfo(snap.ufo, dt);
     snap.rm.forEach((st, i) => {
       const ic = this.roomIcons[i];
@@ -211,16 +219,16 @@ export class View {
       m.position.set(pw.x, pw.y, pw.z);
       const v = Math.min(12, Math.hypot(sp.x - prevX, sp.z - prevZ) / Math.max(dt, 1e-3));
       o.speed += (v - o.speed) * Math.min(1, dt * 8);
-      const driving = !!p.car;
-      m.visible = !driving;
-      o.tag.visible = !driving;
+      const driving = !!p.car, gone = !!p.out; // taken: nothing left to see
+      m.visible = !driving && !gone;
+      o.tag.visible = !driving && !gone;
       if (p.dn > 0) { m.rotation.x = -Math.PI / 2; m.position.y = pw.y + 0.2; }
       else { m.rotation.x = 0; m.rotation.y = angleLerp(m.rotation.y, st.yaw + Math.PI, k); }
       m.userData.carrying = !!p.h;
       animateCharacter(m, o.speed > 5.5 ? 'run' : o.speed > 0.4 ? 'walk' : 'idle', null, this.time);
       o.tag.position.set(m.position.x, m.position.y + 2.45, m.position.z);
       o.tag.material.opacity = p.dn > 0 ? 0.4 : 1;
-      if (st.fl && !driving && p.dn <= 0 && spot < this.spots.length) {
+      if (st.fl && !driving && !gone && p.dn <= 0 && spot < this.spots.length) {
         const s = this.spots[spot++];
         s.intensity = ctx.flashPower || 40;
         s.position.set(m.position.x, m.position.y + 1.6, m.position.z);
@@ -475,12 +483,15 @@ export class View {
     for (const m of list) {
       seen.add(m.i);
       let o = this.monsters.get(m.i);
+      // A mimic is drawn as a plain suitcase until it unfolds (and folds back up when it hides again).
+      const look = m.k === 'mimic' ? (m.dg ? 'bag' : 'mimic') : m.k;
+      if (o && o.look !== look) { this.scene.remove(o.mesh); disposeModel(o.mesh); this.monsters.delete(m.i); o = null; }
       if (!o) {
-        const mesh = m.k === 'porter' ? buildPorter() : m.k === 'raccoon' ? buildRaccoon() : buildShade();
+        const mesh = look === 'porter' ? buildPorter() : look === 'raccoon' ? buildRaccoon() : look === 'bag' ? mimicBag() : look === 'mimic' ? buildMimic() : look === 'static' ? buildStatic() : buildShade();
         const ow = L.toWorld(m.x, m.z, m.y || 0);
         mesh.position.set(ow.x, ow.y, ow.z);
         this.scene.add(mesh);
-        o = { mesh, k: m.k, sim: { x: m.x, z: m.z } };
+        o = { mesh, k: m.k, look, sim: { x: m.x, z: m.z } };
         this.monsters.set(m.i, o);
       }
       const mesh = o.mesh;
@@ -492,6 +503,9 @@ export class View {
       mesh.position.y += (mw.y - mesh.position.y) * k;
       mesh.rotation.y = angleLerp(mesh.rotation.y, m.r, k);
       if (o.k === 'raccoon') { animateRaccoon(mesh, m.a, this.time); continue; }
+      if (o.look === 'bag') { mesh.scale.y = 1 + Math.max(0, Math.sin(this.time * 1.7)) * 0.03; continue; } // ...is it breathing?
+      if (o.look === 'mimic') { animateMimic(mesh, m.a, this.time); continue; }
+      if (o.look === 'static') { mesh.position.x += (Math.random() - 0.5) * 0.06; continue; }
       if (mesh.userData.float) mesh.position.y = mw.y + 0.25 + Math.sin(this.time * 2.5) * 0.12;
       const still = m.a === 'idle'; // a figure at the end of the hall, just standing there
       animateCharacter(mesh, m.a === 'stun' ? 'stun' : still ? 'idle' : 'walk', null, this.time * (o.k === 'porter' ? 0.55 : 1));
@@ -501,6 +515,12 @@ export class View {
       }
     }
     for (const [id, o] of this.monsters) if (!seen.has(id)) { this.scene.remove(o.mesh); disposeModel(o.mesh); this.monsters.delete(id); }
+  }
+
+  // Television snow for the Static (only the security cameras ever see it).
+  updateStatic(dt) {
+    this.staticT = (this.staticT || 0) - dt;
+    if (this.staticT <= 0) { this.staticT = 0.08; scrambleStatic(); }
   }
 
   syncUfo(u, dt) {

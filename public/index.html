@@ -22,11 +22,12 @@
     <div id="vignette"></div>
     <div id="pulse"></div>
     <div id="scare"></div>
+    <div id="cctv" class="hidden"></div>
     <div id="hud-tl">
       <div id="shift-name"></div>
       <div id="clock-row"><div id="clock">3:00 PM</div><div id="phase-label"></div></div>
       <div id="timeline" class="hidden"><div class="tl-night"></div><div class="tl-food"></div><div id="tl-now"></div><span class="tl-a">3PM</span><span class="tl-b">NOON</span></div>
-      <div id="power">⚡ POWER OUT — reset the breaker</div>
+      <div id="power">⚡ POWER OUT — the breaker is out back</div>
     </div>
     <div id="rating" class="hidden">
       <div class="rating-stars"><div class="starbar big"><span id="rating-fill" class="starfill"></span></div><div id="rating-mark"></div></div>
@@ -55,6 +56,9 @@
     <div id="hint"></div>
     <div id="tip"></div>
     <div id="titlecard"></div>
+    <div id="call"></div>
+    <div id="taken"></div>
+    <div id="objective"></div>
     <div id="downscreen"></div>
     <div id="closing"></div>
     <div id="fade"></div>
@@ -71,11 +75,11 @@
         <div class="neon">THE LAST RESORT</div>
         <div class="tag">a hotel horror for you and your friends</div>
       </div>
-      <p class="pitch">You run the front desk, the kitchen, the valet stand and the mop bucket at a roadside hotel.
-        Every shift brings a stranger clientele. Keep the guests happy enough to leave good reviews,
-        or corporate shuts you down. Some guests should never be let in.</p>
+      <p class="pitch">You and your friends are the new staff at The Last Resort, a snowbound mountain hotel.
+        The owner, Mr. Harrow, reads every review, so keep the guests happy. Some guests should never be
+        let in. And the door at the back of Storage stays locked.</p>
       <label class="field">Your name <input id="name" maxlength="16" autocomplete="off"></label>
-      <div class="field col">Difficulty <small>(when hosting · fine-tune any time in the Manager's Office)</small>
+      <div class="field col">Difficulty <small>(when hosting · fine-tune it at the break room terminal)</small>
         <div id="preset-pick" class="preset-pick"></div>
       </div>
       <label class="field">Shift length

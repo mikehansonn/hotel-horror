@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { box, rbox, cyl, ball, mat, glow, cylGeo } from './models.js';
 import { labelTexture } from './textures.js';
+import { mulberry32 } from './util.js';
 
 // Shared emissive materials the world dims/flickers as a group.
 export const LIGHTS = {
@@ -21,6 +22,70 @@ export const LIGHTS = {
   fire: new THREE.MeshLambertMaterial({ color: '#ffb347', emissive: '#ff6a1a', emissiveIntensity: 1.6 }),
 };
 const SNOW = '#eef3f8';
+
+// The mountainside at night, for the room windows (drawn once; world.js tints it for the time of day).
+function windowViewTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 200;
+  const g = c.getContext('2d'), r = mulberry32(42);
+  const sky = g.createLinearGradient(0, 0, 0, 140);
+  sky.addColorStop(0, '#0b1430'); sky.addColorStop(1, '#3a4a72');
+  g.fillStyle = sky; g.fillRect(0, 0, 256, 200);
+  for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(255,255,255,${0.3 + r() * 0.6})`; g.fillRect(r() * 256, r() * 100, 1.5, 1.5); }
+  g.fillStyle = '#f2f0e0'; g.beginPath(); g.arc(196, 38, 13, 0, 7); g.fill();
+  g.fillStyle = '#1d2744';
+  g.beginPath(); g.moveTo(0, 130); g.lineTo(50, 78); g.lineTo(96, 120); g.lineTo(150, 64); g.lineTo(210, 118); g.lineTo(256, 90); g.lineTo(256, 200); g.lineTo(0, 200); g.fill();
+  g.fillStyle = '#c9d6ea';
+  g.beginPath(); g.moveTo(150, 64); g.lineTo(136, 80); g.lineTo(150, 76); g.lineTo(164, 81); g.fill();
+  g.fillStyle = '#e6edf6'; g.fillRect(0, 150, 256, 50);
+  for (let i = 0; i < 9; i++) {
+    const x = 10 + i * 30 + r() * 12, h = 36 + r() * 30, b = 156 + r() * 10;
+    g.fillStyle = '#0f1d1a'; g.beginPath(); g.moveTo(x, b - h); g.lineTo(x - h * 0.32, b); g.lineTo(x + h * 0.32, b); g.fill();
+    g.fillStyle = 'rgba(235,242,250,0.85)'; g.beginPath(); g.moveTo(x, b - h); g.lineTo(x - h * 0.1, b - h * 0.68); g.lineTo(x + h * 0.1, b - h * 0.68); g.fill();
+  }
+  for (let i = 0; i < 70; i++) { g.fillStyle = 'rgba(255,255,255,0.7)'; g.fillRect(r() * 256, r() * 200, 2, 2); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// The front page of the Mountain Courier, March 5th 1926.
+function newspaperTexture() {
+  const c = document.createElement('canvas');
+  c.width = 248; c.height = 328;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e4d8b8'; g.fillRect(0, 0, 248, 328);
+  g.fillStyle = '#2a2218';
+  g.font = 'bold 22px Georgia, serif'; g.textAlign = 'center';
+  g.fillText('THE MOUNTAIN COURIER', 124, 30);
+  g.fillRect(12, 38, 224, 2);
+  g.font = '11px Georgia, serif'; g.fillText('MARCH 5, 1926 · FIVE CENTS', 124, 52);
+  g.font = 'bold 25px Georgia, serif';
+  g.fillText('GUESTS VANISH', 124, 86);
+  g.fillText('AT HARROW HOTEL', 124, 114);
+  g.font = 'italic 12px Georgia, serif';
+  g.fillText('Night porter found unharmed, will not speak', 124, 134);
+  g.fillStyle = '#6a5e48'; g.fillRect(20, 146, 96, 70);
+  g.fillStyle = '#2a2218';
+  for (let i = 0; i < 16; i++) g.fillRect(i < 7 ? 124 : 20, 150 + i * 10 + (i < 7 ? 0 : 0), i < 7 ? 104 : 208, 3);
+  for (let i = 0; i < 6; i++) g.fillRect(20, 230 + i * 12, 208, 3);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// Grey snow for the monitors nobody is watching (world.js scrolls it).
+function noiseTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 64 * 64; i++) { const v = 40 + Math.random() * 160; g.fillStyle = `rgb(${v},${v + 8},${v})`; g.fillRect(i % 64, Math.floor(i / 64), 1, 1); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+LIGHTS.view = new THREE.MeshBasicMaterial({ map: windowViewTexture(), color: '#8696bc' });
+LIGHTS.ring = new THREE.MeshLambertMaterial({ color: '#5a1010', emissive: '#ff2020', emissiveIntensity: 0 });
+LIGHTS.monitor = new THREE.MeshBasicMaterial({ map: noiseTexture(), color: '#a8c4b0' });
+LIGHTS.cellar = new THREE.MeshLambertMaterial({ color: '#ffd28a', emissive: '#ffb347', emissiveIntensity: 0.9 });
 
 const keep = m => { m.userData.keep = true; return m; };
 
@@ -115,15 +180,195 @@ export const PROPS = {
     box(g, tw - 0.06, tw * 0.6 - 0.06, 0.01, '#1a2230', 0, 0.85 + tw * 0.3, -0.065);
     return g;
   },
+  // A sash window looking out over the snowy mountainside; the curtains draw across it.
   window(f) {
     const g = new THREE.Group();
-    box(g, 1.5, 1.2, 0.06, '#e8e2d2', 0, 1.6, -0.02);
-    box(g, 1.36, 1.06, 0.02, LIGHTS.window, 0, 1.6, 0.02);
+    const frame = '#e8e2d2';
+    box(g, 1.62, 1.32, 0.03, frame, 0, 1.6, -0.06);
+    box(g, 1.42, 1.12, 0.01, LIGHTS.view, 0, 1.6, -0.035);
+    box(g, 1.42, 1.12, 0.004, mat('#ffffff', { transparent: true, opacity: 0.07 }), 0, 1.6, -0.01);
+    for (const y of [-0.61, 0.61]) box(g, 1.62, 0.1, 0.07, frame, 0, 1.6 + y, -0.01);
+    for (const x of [-0.76, 0.76]) box(g, 0.1, 1.32, 0.07, frame, x, 1.6, -0.01);
+    box(g, 0.05, 1.12, 0.04, frame, 0, 1.6, -0.015);
+    box(g, 1.42, 0.05, 0.04, frame, 0, 1.64, -0.015);
+    box(g, 1.78, 0.06, 0.2, '#d8cfbd', 0, 0.92, 0.07);
     box(g, 1.7, 0.05, 0.12, BRASS, 0, 2.28, 0.06);
     const curtain = mat('#6e1f2a');
     const L = keep(box(g, 0.8, 1.45, 0.05, curtain, -0.42, 1.52, 0.1));
     const R = keep(box(g, 0.8, 1.45, 0.05, curtain, 0.42, 1.52, 0.1));
     g.userData.curtains = [L, R];
+    return g;
+  },
+  // A heavy black desk telephone; its little lamp blinks while it rings.
+  deskPhone(f) {
+    const g = new THREE.Group();
+    const y = f.y || 1.08, black = mat('#141414');
+    rbox(g, 0.22, 0.08, 0.18, black, 0, y + 0.04, 0);
+    cyl(g, 0.055, 0.06, 0.02, '#e8e2d2', 0, y + 0.085, 0.03, 12);
+    box(g, 0.24, 0.035, 0.05, black, 0, y + 0.12, -0.05);
+    for (const s of [-1, 1]) ball(g, 0.035, black, 0.11 * s, y + 0.12, -0.05, 1, 0.8, 1.2);
+    ball(g, 0.014, LIGHTS.ring, 0.08, y + 0.085, 0.07);
+    return g;
+  },
+  // The security desk: a bank of little monitors (they all show the same grey snow until you sit down).
+  cctvDesk(f) {
+    const g = new THREE.Group();
+    box(g, f.w, 0.06, f.d, DARKWOOD, 0, 0.76, 0);
+    for (const s of [-1, 1]) box(g, 0.06, 0.74, f.d - 0.1, DARKWOOD, (f.w / 2 - 0.08) * s, 0.37, 0);
+    box(g, f.w - 0.2, 0.05, 0.3, '#2b2b2b', 0, 1.25, -f.d / 2 + 0.2);
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+      const x = (c - 1) * 0.72, y = 1.02 + r * 0.46;
+      box(g, 0.62, 0.42, 0.34, '#2a2a2a', x, y, -f.d / 2 + 0.22);
+      box(g, 0.54, 0.34, 0.01, LIGHTS.monitor, x, y, -f.d / 2 + 0.395);
+    }
+    box(g, 0.5, 0.025, 0.16, '#d8d2c2', 0, 0.8, 0.12);
+    cyl(g, 0.04, 0.035, 0.1, '#7a1f1f', 0.55, 0.84, 0.15, 10);
+    return g;
+  },
+  officeChair() {
+    const g = new THREE.Group();
+    cyl(g, 0.28, 0.28, 0.03, '#1c1c1c', 0, 0.05, 0, 10);
+    cyl(g, 0.03, 0.03, 0.4, STEEL, 0, 0.26, 0, 6);
+    rbox(g, 0.5, 0.08, 0.48, '#2b2b2b', 0, 0.48, 0);
+    rbox(g, 0.48, 0.55, 0.07, '#2b2b2b', 0, 0.8, -0.22);
+    return g;
+  },
+  fileCabinet(f) {
+    const g = new THREE.Group();
+    box(g, f.w, 1.3, f.d, '#6d7377', 0, 0.65, 0);
+    for (let i = 0; i < 4; i++) { box(g, f.w - 0.06, 0.28, 0.01, '#7c8286', 0, 0.2 + i * 0.31, f.d / 2 + 0.005); box(g, 0.12, 0.025, 0.03, STEEL, 0, 0.27 + i * 0.31, f.d / 2 + 0.02); }
+    return g;
+  },
+  // A framed front page from March 1926 that nobody has ever taken down.
+  newsClipping(f) {
+    const g = new THREE.Group();
+    const y = f.y || 1.65;
+    box(g, 0.72, 0.92, 0.04, BRASS, 0, y, 0);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.82), new THREE.MeshLambertMaterial({ map: newspaperTexture() }));
+    m.position.set(0, y, 0.025);
+    g.add(keep(m));
+    return g;
+  },
+  // The order terminal by the break room door: Mr. Harrow's budget, and what you spend it on.
+  terminal(f) {
+    const g = new THREE.Group();
+    const y = f.y || 1.15;
+    box(g, 0.62, 0.5, 0.3, '#d8cfb8', 0, y + 0.2, 0.15);
+    box(g, 0.46, 0.32, 0.01, LIGHTS.screen, 0, y + 0.24, 0.305);
+    box(g, 0.66, 0.05, 0.36, '#c8bfa8', 0, y - 0.06, 0.2);
+    box(g, 0.5, 0.02, 0.15, '#3a3a3a', 0, y - 0.025, 0.3);
+    const p = signPlane('ORDERS · S. HARROW', 0.6, 0.08, { color: '#3a2a1a', bg: '#e8dcc0', font: 'bold 34px Georgia, serif', h: 50 });
+    p.position.set(0, y + 0.56, 0.02);
+    g.add(p);
+    return g;
+  },
+  // A camera on a pole behind the hotel, watching the breaker box.
+  cameraPole() {
+    const g = new THREE.Group();
+    cyl(g, 0.07, 0.09, 4.2, '#4a4f54', 0, 2.1, 0, 8);
+    const body = box(g, 0.18, 0.16, 0.36, '#e8e8e8', 0, 4.15, 0.12);
+    body.rotation.x = 0.3;
+    ball(g, 0.02, glow('#ff1a1a', 2.5), 0.06, 4.24, 0.3);
+    return g;
+  },
+  // The steps down from the basement door: worn stone, a rope handrail and the low door at the top.
+  cellarSteps(f) {
+    const g = new THREE.Group();
+    const n = 8, d = f.run / n, rise = f.rise / n, w = f.span, stone = mat('#5d5953'), dark = mat('#3d3a36');
+    for (let i = 0; i < n; i++) box(g, d + 0.02, (i + 1) * rise, w, i % 2 ? stone : dark, (i + 0.5) * d, ((i + 1) * rise) / 2, 0);
+    box(g, f.land, f.rise, w, stone, f.run + f.land / 2, f.rise / 2, 0);
+    box(g, f.run + f.land, f.rise + 0.9, 0.12, dark, (f.run + f.land) / 2, (f.rise + 0.9) / 2, w / 2 + 0.06);
+    box(g, 0.06, 1.62, 0.95, '#2b1d14', f.run + f.land - 0.02, f.rise + 0.81, 0);
+    for (let i = 0; i < 3; i++) box(g, 0.05, 0.05, 1.0, '#4a4a4a', f.run + f.land - 0.05, f.rise + 0.3 + i * 0.55, 0);
+    ball(g, 0.035, BRASS, f.run + f.land - 0.07, f.rise + 0.85, 0.32);
+    cyl(g, 0.02, 0.02, Math.hypot(f.run, f.rise), '#8a7656', f.run / 2, f.rise / 2 + 0.9, -w / 2 + 0.05, 6).rotation.z = Math.PI / 2 - Math.atan2(f.rise, f.run);
+    return g;
+  },
+  // The old boiler: a riveted iron furnace with a glowing grate and pipes climbing into the dark.
+  furnace(f) {
+    const g = new THREE.Group();
+    const iron = mat('#2e2a26'), rust = mat('#5a3a24');
+    box(g, f.w, 2.2, f.d, iron, 0, 1.1, 0);
+    box(g, f.w + 0.1, 0.12, f.d + 0.1, rust, 0, 2.26, 0);
+    for (let i = 0; i < 7; i++) for (const y of [0.25, 2.05]) ball(g, 0.03, rust, -f.w / 2 + 0.25 + i * ((f.w - 0.5) / 6), y, f.d / 2 + 0.01);
+    cyl(g, 0.42, 0.42, 0.06, rust, 0, 0.95, f.d / 2 + 0.03, 16).rotation.x = Math.PI / 2;
+    cyl(g, 0.34, 0.34, 0.02, LIGHTS.fire, 0, 0.95, f.d / 2 + 0.065, 16).rotation.x = Math.PI / 2;
+    for (let i = 0; i < 5; i++) box(g, 0.04, 0.6, 0.03, iron, -0.24 + i * 0.12, 0.95, f.d / 2 + 0.08);
+    for (const x of [-0.8, 0.8]) cyl(g, 0.16, 0.16, 1.2, rust, x, 2.9, -0.2, 10);
+    for (const x of [-0.5, 0.5]) { cyl(g, 0.11, 0.11, 0.04, '#d8cfbd', x, 1.75, f.d / 2 + 0.03, 12).rotation.x = Math.PI / 2; box(g, 0.012, 0.08, 0.01, '#1a1a1a', x, 1.77, f.d / 2 + 0.055).rotation.z = 0.6; }
+    return g;
+  },
+  coalPile(f) {
+    const g = new THREE.Group();
+    const r = mulberry32(7);
+    for (let i = 0; i < 22; i++) ball(g, 0.12 + r() * 0.12, i % 3 ? '#151413' : '#222120', (r() - 0.5) * f.w * 0.8, 0.08 + r() * 0.3 * (1 - Math.abs(r() - 0.5)), (r() - 0.5) * f.d * 0.8, 1, 0.7, 1);
+    box(g, 0.05, 1.1, 0.05, '#5a4632', f.w / 2 - 0.1, 0.55, 0.3).rotation.z = -0.3;
+    return g;
+  },
+  // Pipes along the ceiling, sweating in the cold.
+  pipeRun(f) {
+    const g = new THREE.Group();
+    const y = f.low ? 2.6 : 2.85;
+    for (const [z, r, c] of [[0, 0.09, '#4f4a44'], [0.26, 0.06, '#6a3d2a']]) cyl(g, r, r, f.len, c, 0, y - z * 0.3, z, 8).rotation.z = Math.PI / 2;
+    for (let x = -f.len / 2 + 1; x < f.len / 2; x += 2.5) box(g, 0.05, 0.4, 0.5, '#2b2b2b', x, y + 0.2, 0.12);
+    return g;
+  },
+  // Luggage nobody ever came back for: steamer trunks and old cases, piled high.
+  trunkPile(f) {
+    const g = new THREE.Group();
+    const r = mulberry32(f.seed || 1), cols = ['#5a3a24', '#3d2a1e', '#6b4a2a', '#2e3a4a', '#4a2a2a', '#5c5a4a'];
+    let y = 0;
+    for (let i = 0; i < 4; i++) {
+      const w = f.w * (0.9 - i * 0.15), d = f.d * (0.95 - i * 0.12), h = 0.32 + r() * 0.25;
+      box(g, w, h, d, cols[Math.floor(r() * cols.length)], (r() - 0.5) * 0.25, y + h / 2, (r() - 0.5) * 0.2).rotation.y = (r() - 0.5) * 0.4;
+      box(g, w + 0.02, 0.04, d + 0.02, '#2a1a10', 0, y + h * 0.75, 0);
+      y += h;
+    }
+    for (let i = 0; i < 3; i++) box(g, 0.12, 0.09, 0.005, ['#e8d29a', '#c94f4f', '#4f8ac9'][i], (r() - 0.5) * f.w * 0.6, 0.3 + r() * (y - 0.4), f.d / 2 + 0.01);
+    return g;
+  },
+  // The old porter's cart: brass rails, threadbare carpet, and a hook where a key should hang.
+  porterCart(f) {
+    const g = new THREE.Group();
+    const brass = mat('#8a6d2a');
+    box(g, f.w, 0.05, f.d, '#5a1f2b', 0, 0.3, 0);
+    for (const sx of [-1, 1]) {
+      cyl(g, 0.02, 0.02, 1.6, brass, (f.w / 2 - 0.05) * sx, 1.1, -f.d / 2 + 0.05, 6);
+      for (const sz of [-1, 1]) cyl(g, 0.06, 0.06, 0.04, '#1a1a1a', (f.w / 2 - 0.08) * sx, 0.06, (f.d / 2 - 0.08) * sz, 10).rotation.z = Math.PI / 2;
+    }
+    cyl(g, 0.02, 0.02, f.w, brass, 0, 1.9, -f.d / 2 + 0.05, 6).rotation.z = Math.PI / 2;
+    box(g, 0.02, 0.1, 0.02, brass, 0, 1.0, -f.d / 2 + 0.05);
+    box(g, 0.46, 0.5, 0.22, '#3d2a1e', -0.2, 0.58, 0.05);
+    return g;
+  },
+  // The hotel register for 1926, open at its last page, with a candle burned down to nothing.
+  ledgerDesk(f) {
+    const g = new THREE.Group();
+    box(g, f.w, 0.05, f.d, '#3a2416', 0, 0.78, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(g, 0.05, 0.76, 0.05, '#3a2416', (f.w / 2 - 0.06) * sx, 0.38, (f.d / 2 - 0.06) * sz);
+    box(g, 0.52, 0.04, 0.36, '#4a1f1a', 0, 0.82, 0);
+    for (const s of [-1, 1]) box(g, 0.24, 0.012, 0.32, '#e8dcc0', 0.125 * s, 0.85, 0).rotation.z = 0.04 * s;
+    cyl(g, 0.03, 0.035, 0.05, '#1a1a1a', 0.42, 0.83, -0.12, 8);
+    cyl(g, 0.025, 0.025, 0.05, '#efe6d0', -0.45, 0.83, -0.18, 8);
+    return g;
+  },
+  // The iron door at the bottom of the hotel: rivets, chains crossed over it and a number painted above.
+  ironDoor() {
+    const g = new THREE.Group();
+    const iron = mat('#24221f'), chain = mat('#5c5852');
+    box(g, 2.0, 2.7, 0.2, '#1a1918', 0, 1.35, -0.05);
+    box(g, 1.6, 2.4, 0.12, iron, 0, 1.2, 0.05);
+    for (let i = 0; i < 6; i++) for (const x of [-0.7, 0.7]) ball(g, 0.03, '#3a3632', x, 0.2 + i * 0.4, 0.12);
+    for (const s of [-1, 1]) {
+      const c = box(g, 2.0, 0.06, 0.06, chain, 0, 1.25, 0.17);
+      c.rotation.z = 0.75 * s;
+    }
+    box(g, 0.2, 0.26, 0.1, '#6a5a2a', 0, 1.25, 0.2);
+    box(g, 0.9, 0.04, 0.03, '#7a1010', 0, 0.5, 0.115).rotation.z = 0.3;
+    box(g, 0.7, 0.03, 0.03, '#7a1010', 0.1, 0.75, 0.115).rotation.z = -0.2;
+    const p = signPlane('000', 0.7, 0.32, { color: '#9e1a1a', bg: null, font: 'bold 72px Georgia, serif', h: 90 });
+    p.position.set(0, 2.55, 0.06);
+    g.add(p);
     return g;
   },
   painting(f) {
@@ -260,10 +505,10 @@ export const PROPS = {
     cyl(g, 0.08, 0.12, 0.16, LIGHTS.lamp, 0, (f.y || 2.2) + 0.08, 0.1, 8);
     return g;
   },
-  bulb() {
+  bulb(f) {
     const g = new THREE.Group();
     cyl(g, 0.01, 0.01, 0.6, '#222', 0, 2.9, 0, 4);
-    ball(g, 0.08, LIGHTS.lamp, 0, 2.55, 0);
+    ball(g, 0.08, f?.cellar ? LIGHTS.cellar : LIGHTS.lamp, 0, 2.55, 0);
     return g;
   },
   exitSign(f) {

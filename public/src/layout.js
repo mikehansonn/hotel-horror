@@ -20,8 +20,9 @@ export const LOT = { x1: -30, x2: 30, z1: 17, z2: 37 };
 export const ROAD = { z1: 10.4, z2: 17 };
 export const ROAD_Z = 14.8;
 export const RESPAWN = { x: 24.5, z: -16.6 };
-export const BASEMENT = { x: 28.9, z: -23.9 };
-export const SPAWNS = [[5.0, -9.2], [6.4, -9.2], [7.8, -9.2], [5.0, -10.0], [6.4, -10.0], [7.8, -10.0]];
+export const BASEMENT = { x: 28.9, z: -23.9 }; // the basement door, at the back of Storage
+// Everyone clocks in (and starts the game) in the break room.
+export const SPAWNS = [[23.2, -16.4], [24.6, -16.4], [26.0, -16.4], [27.4, -16.4], [23.6, -12.4], [26.6, -12.4]];
 
 // Upper floors: the simulation stays flat, so each storey above the ground floor is laid out
 // FLOOR_DX meters further east and drawn FLOOR_H higher. toWorld() lifts a point onto its storey.
@@ -32,20 +33,29 @@ export const FLOORS = [
   { f: 1, flag: 'floor2', name: 'Second Floor', short: '2F', first: 201 },
   { f: 2, flag: 'floor3', name: 'Third Floor', short: '3F', first: 301 },
 ];
-export const floorOf = x => Math.max(0, Math.min(FLOORS.length - 1, Math.round(x / FLOOR_DX)));
+// The basement is level 3: laid out 3000 m east like a storey, but drawn 6 m below the ground floor.
+export const BASEMENT_F = 3;
+export const BASEMENT_Y = -6;
+export const levelY = f => (f === BASEMENT_F ? BASEMENT_Y : f * FLOOR_H);
+export const floorOf = x => (x > 2500 ? BASEMENT_F : Math.max(0, Math.min(FLOORS.length - 1, Math.round(x / FLOOR_DX))));
 export function toWorld(x, z, y = 0) {
   const f = floorOf(x);
-  return { x: x - f * FLOOR_DX, y: y + f * FLOOR_H, z };
+  return { x: x - f * FLOOR_DX, y: y + levelY(f), z };
 }
-export const floorBuilt = f => f === 0 || !!FLAGS[FLOORS[f].flag];
+export const floorBuilt = f => f === 0 || f === BASEMENT_F || !!FLAGS[FLOORS[f].flag];
+export const floorName = f => (f === BASEMENT_F ? 'Basement' : FLOORS[f].name);
+export const floorShort = f => (f === BASEMENT_F ? 'B' : FLOORS[f].short);
+// The steps down from the basement door: a ramp from the foot (x1) up to a landing at the door.
+export const BSM_STEPS = { x1: 3026.3, x2: 3028.8, x3: 3029.85, z1: -23.1, z2: -21.7, rise: 1.5 };
 // The guest-room tower: the part of the building that grows upward.
 export const TOWER = { x1: -30, x2: 30, z1: -29, z2: -11 };
 // Roofed blocks of the building (ceilings, roofs and the minimap).
 export const BLOCKS = [
   { x1: -30, x2: 30, z1: -29, z2: 8, wing: null, floor: 0 },
   ...FLOORS.slice(1).map(F => ({ x1: TOWER.x1 + F.f * FLOOR_DX, x2: TOWER.x2 + F.f * FLOOR_DX, z1: TOWER.z1, z2: TOWER.z2, wing: F.flag, floor: F.f })),
+  { x1: 3006, x2: 3030, z1: -29, z2: -11, wing: null, floor: BASEMENT_F, cellar: true },
 ];
-export const STAFF_ZONES = new Set(['kitchen', 'laundry', 'utility', 'staff', 'storage', 'linen', 'closet']);
+export const STAFF_ZONES = new Set(['kitchen', 'laundry', 'office', 'staff', 'storage', 'linen', 'closet', 'basement']);
 export const HEDGE_MAZE = { x1: -66, x2: -40, z1: -9, z2: 7 };
 // One straight staircase at the west end of the hallway, along its north wall, like the stairs in a
 // house: every storey's flight climbs toward the end of the hall, right above the flight below. At the
@@ -72,13 +82,32 @@ export const ZONES = [
   { id: 'dining', name: 'Dining Room', x1: -30, z1: -3, x2: -10, z2: 8, floor: 'wood', wall: 'dining', pub: true },
   { id: 'kitchen', name: 'Kitchen', x1: -30, z1: -11, x2: -10, z2: -3, floor: 'checker', wall: 'tile' },
   { id: 'laundry', name: 'Laundry', x1: -30, z1: -18, x2: -20, z2: -11, floor: 'tile', wall: 'plain' },
-  { id: 'utility', name: 'Utility Room', x1: -30, z1: -29, x2: -20, z2: -22, floor: 'concrete', wall: 'concrete' },
+  { id: 'office', name: 'Security Office', x1: -30, z1: -29, x2: -20, z2: -22, floor: 'tile', wall: 'staff' },
   { id: 'hall', name: 'Hallway', x1: -30, z1: -22, x2: 30, z2: -18, floor: 'carpet', wall: 'hall', pub: true },
   { id: 'hall', name: 'Hallway', x1: -2, z1: -18, x2: 2, z2: -11, floor: 'carpet', wall: 'hall', pub: true },
   { id: 'elev', name: 'Elevators', x1: -2, z1: -29, x2: 2, z2: -22, floor: 'carpet', wall: 'hall', pub: true },
   { id: 'pool', name: 'Pool', x1: 10, z1: -11, x2: 30, z2: 8, floor: 'pooltile', wall: 'pool', pub: true },
-  { id: 'staff', name: 'Staff Room', x1: 20, z1: -18, x2: 30, z2: -11, floor: 'tile', wall: 'staff' },
+  { id: 'staff', name: 'Break Room', x1: 20, z1: -18, x2: 30, z2: -11, floor: 'tile', wall: 'staff' },
   { id: 'storage', name: 'Storage', x1: 20, z1: -29, x2: 30, z2: -22, floor: 'concrete', wall: 'concrete' },
+  // the basement: a long cellar hall, the boiler room off its north side and the lost luggage to the south
+  { id: 'basement', name: 'Basement', x1: 3006, z1: -24, x2: 3030, z2: -16, floor: 'stone', wall: 'stone' },
+  { id: 'basement', name: 'Boiler Room', x1: 3016, z1: -29, x2: 3026, z2: -24, floor: 'stone', wall: 'stone' },
+  { id: 'basement', name: 'Lost Luggage', x1: 3012, z1: -16, x2: 3024, z2: -11, floor: 'stone', wall: 'stone' },
+];
+// Security cameras: what the monitors in the Security Office can show, four at a time. Each looks from
+// (x, y, z) toward (tx, ty, tz); on: only once that part of the hotel exists.
+export const CAMERAS = [
+  { id: 'lobby', name: 'LOBBY', x: 9.5, y: 2.95, z: -10.5, tx: -3, ty: 0.6, tz: 4 },
+  { id: 'door', name: 'FRONT DOOR', x: -9.5, y: 2.95, z: 7.5, tx: 4, ty: 0.6, tz: -4 },
+  { id: 'hallw', name: 'HALL WEST', x: -29.4, y: 2.95, z: -21.6, tx: 0, ty: 0.6, tz: -19.6 },
+  { id: 'halle', name: 'HALL EAST', x: 29.4, y: 2.95, z: -21.6, tx: 0, ty: 0.6, tz: -19.6 },
+  { id: 'pool', name: 'POOL', x: 29.5, y: 2.95, z: -10.5, tx: 16, ty: 0, tz: 2 },
+  { id: 'dining', name: 'DINING ROOM', x: -29.5, y: 2.95, z: 7.5, tx: -15, ty: 0.6, tz: -1 },
+  { id: 'storage', name: 'STORAGE', x: 20.6, y: 2.95, z: -28.6, tx: 29, ty: 0.8, tz: -23.6 },
+  { id: 'back', name: 'BEHIND THE HOTEL', x: -9, y: 4.2, z: -42, tx: 0, ty: 0.8, tz: -30 },
+  { id: 'hall2', name: '2F HALL', x: 970.6, y: 2.95, z: -18.4, tx: 1000, ty: 0.6, tz: -20.4, on: 'floor2' },
+  { id: 'hall3', name: '3F HALL', x: 1970.6, y: 2.95, z: -18.4, tx: 2000, ty: 0.6, tz: -20.4, on: 'floor3' },
+  { id: 'cellar', name: 'BASEMENT', x: 3029.4, y: 2.9, z: -16.6, tx: 3008, ty: 0.6, tz: -20.4 },
 ];
 const OUTSIDE = { id: 'outside', name: 'Outside', pub: true, wall: 'brick' };
 
@@ -264,7 +293,7 @@ function makeRoom(id, cx, side, wing = null) {
   collider(...B(-2.725, 5.475, -1.875, 6.325));
   collider(...B(2.3, 1.625, 2.95, 2.275));
 
-  furn('window', r.window.x, r.window.z, backRy, { room: id });
+  { const wp = P(1.95, 6.8); furn('window', wp.x, wp.z, backRy, { room: id }); } // on the wall's face, not inside it
   { const p = P(2.6, 1.95); furn('toilet', p.x, p.z, -PI / 2, {}); }
   { const p = P(2.72, 0.6); furn('sink', p.x, p.z, -PI / 2, {}); }
   { const p = P(-2.87, 1.25); furn('thermostat', p.x, p.z, PI / 2, { room: id }); }
@@ -347,7 +376,7 @@ function makePres() {
   furn('wardrobe', X(21), -27.6, PI / 2, { w: 1.8, d: 0.7 });
   furn('vanityTable', X(29.2), -26.5, -PI / 2, { w: 1.4, d: 0.6 });
   furn('rug', X(25), -26.4, 0, { rw: 4.2, rd: 3.0, color: '#5c1a28' });
-  furn('window', r.window.x, r.window.z, 0, { room: id });
+  furn('window', r.window.x, -28.8, 0, { room: id });
   furn('painting', X(22.4), -28.97, 0, { y: 1.9, seed: 11, big: true, gold: true });
   // living room
   furn('sofa', X(23.2), -23.3, 0, { w: 3.0, d: 0.9, color: '#6e1f2a' });
@@ -427,6 +456,8 @@ furn('frontDesk', 6, -7.2, 0, { w: 5, d: 0.8 });
 furn('backCounter', 6.6, -10.55, 0, { w: 6.2, d: 0.6 });
 furn('statusBoard', 6.6, -10.83, 0, { y: 2.05 });
 station('desk', 'desk', 6.0, 1.25, -7.35, 0.5);
+furn('deskPhone', 7.9, -7.25, PI, { y: 1.08 });
+station('phone', 'phone', 7.9, 1.17, -7.3, 0.35);
 furn('keyRack', 3.95, -10.8, 0, {});
 station('spare_keys', 'shelf', 3.95, 1.45, -10.6, 0.4, { item: 'keycard', label: 'Spare Key Cards' });
 furn('sofa', -8.1, 4.8, 0, { w: 2.6, d: 0.85, color: '#7a2531' });
@@ -550,30 +581,39 @@ furn('washers', -29.4, -15.5, PI / 2, { w: 3.8, d: 0.8 });
 furn('towelShelf', -20.55, -15.0, -PI / 2, { w: 2.8, d: 0.7 });
 furn('foldTable', -25.2, -15.0, 0, { w: 2.5, d: 1.2 });
 station('towels', 'shelf', -21.05, 1.1, -15.0, 0.65, { item: 'towels', label: 'Towels' });
-furn('breaker', -29.8, -25.5, PI / 2, {});
-furn('boiler', -26.5, -27.3, 0, { w: 1.8, d: 1.8 });
-furn('waterHeater', -29.2, -23.2, 0, { w: 0.9, d: 0.9 });
+// The Security Office (where the old utility room was): a bank of monitors, the night phone and a
+// framed newspaper from 1926 nobody has taken down.
+furn('cctvDesk', -26.2, -28.35, 0, { w: 3.4, d: 0.9 });
+furn('officeChair', -26.2, -27.2, PI, {});
+furn('deskPhone', -28.25, -28.3, 0, { y: 0.78 });
+furn('fileCabinet', -29.45, -23.4, PI / 2, { w: 0.6, d: 0.7 });
+furn('newsClipping', -29.83, -25.6, PI / 2, { y: 1.65 });
 furn('batteryShelf', -22.25, -28.55, 0, { w: 2.5, d: 0.55 });
 furn('generator', -23.6, -26.6, 0, { on: 'generator', w: 1.4, d: 0.9 });
 furn('bulb', -25, -25.5, 0, {});
-station('breaker', 'breaker', -29.5, 1.4, -25.5, 0.55);
+station('cctv', 'cctv', -26.2, 1.25, -27.95, 0.7);
+station('phone2', 'phone', -28.25, 0.95, -28.2, 0.35);
 station('batteries', 'shelf', -22.25, 1.15, -28.1, 0.6, { item: 'battery', label: 'Batteries' });
 furn('towelCabinet', -2.9, -18.42, PI, { on: 'chute', w: 1.2, d: 0.45 });
 station('towels2', 'shelf', -2.9, 1.1, -18.9, 0.6, { item: 'towels', label: 'Towels', on: 'chute' });
-sign('UTILITY', -22.5, 2.6, -21.84, 0, 1.2, 0.3);
+sign('SECURITY', -22.5, 2.6, -21.84, 0, 1.3, 0.3);
 sign('LAUNDRY', -22.5, 2.6, -18.16, PI, 1.2, 0.3);
 
-// ---------- staff room & storage ----------
+// ---------- break room & storage ----------
 furn('lockers', 29.5, -15.2, -PI / 2, { w: 4.5, d: 0.6 });
 furn('staffTable', 25, -14.5, 0, { w: 3, d: 1.4 });
 furn('couch', 20.6, -15.5, PI / 2, { w: 3, d: 0.85 });
 furn('corkboard', 27.5, -17.84, 0, { y: 1.6 });
+furn('terminal', 22.3, -17.84, 0, { y: 1.15 });
+station('letter', 'letter', 27.5, 1.6, -17.6, 0.6);
+station('terminal', 'terminal', 22.3, 1.35, -17.6, 0.5);
 furn('energyFridge', 21.2, -11.7, PI, { on: 'energy', w: 0.8, d: 0.6 });
 furn('shelf', 22.25, -28.5, 0, { w: 2.5, d: 0.6 });
 furn('shelf', 27.75, -28.5, 0, { w: 3.5, d: 0.6 });
 furn('shelf', 26, -25.3, 0, { w: 3, d: 0.6 });
 furn('basementDoor', 29.83, -23.9, -PI / 2, {});
-sign('STAFF ROOM', 24, 2.6, -18.16, PI, 1.4, 0.3);
+station('bsm_door', 'cellarDoor', 29.55, 1.3, -23.9, 0.6);
+sign('BREAK ROOM', 24, 2.6, -18.16, PI, 1.4, 0.3);
 sign('STORAGE', 24, 2.6, -21.84, 0, 1.2, 0.3);
 sign('DO NOT OPEN', 29.8, 2.45, -23.9, -PI / 2, 1.3, 0.3, { color: '#ffdddd', bg: '#6b0000' });
 
@@ -591,7 +631,8 @@ sign('NO DIVING', 20, 2.3, -10.84, 0, 1.6, 0.36, { color: '#ffffff', bg: '#b3261
 sign('POOL HOURS: WHENEVER', 29.84, 2.3, -5, -PI / 2, 2.2, 0.32, { color: '#103040', bg: '#cfeef7' });
 
 // ---------- upgrade fixtures around the building ----------
-for (const [x, z, ry] of [[-9.6, -10.6, PI * 0.25], [9.6, 7.6, -PI * 0.75], [-29.6, -21.7, PI / 2], [29.6, -21.7, -PI / 2], [29.6, -10.6, -PI * 0.75], [-29.6, 7.6, PI * 0.75]]) furn('camera', x, z, ry, { on: 'cameras', y: 2.95 });
+for (const c of CAMERAS) if (c.id !== 'back') furn('camera', c.x, c.z, Math.atan2(c.tx - c.x, c.tz - c.z), { y: c.y, on: c.on, gate: c.on });
+furn('cameraPole', -9, -42, Math.atan2(9, 12), {});
 for (const x of [-26, -16, -6, 6, 16, 26]) furn('uvTube', x, -20, 0, { on: 'uv', y: 3.08 });
 for (const x of [-21, -11, -1, 11, 21]) furn('sprinkler', x, -20.6, 0, { on: 'holy', y: 3.14 });
 
@@ -609,6 +650,10 @@ for (const s of [-1, 1]) {
 }
 for (const x of [-16.2, -17.8, -19.4]) furn('flagpole', x, 10.0, 0, { w: 0.3, d: 0.3, seed: Math.round(-x * 10) });
 furn('dumpster', -32.4, -3.5, PI / 2, { w: 3, d: 1.6 });
+// The breaker box is outside, on the back wall: a long cold walk round the building in a blackout.
+furn('breaker', 0, -29.3, PI, {});
+furn('sconce', 1.0, -29.17, PI, { y: 2.4, outdoor: true });
+station('breaker', 'breaker', 0, 1.4, -29.65, 0.6);
 furn('fence', -33.7, -3.5, PI / 2, { w: 4.8 });
 station('dumpster', 'dumpster', -31.3, 1.35, -3.5, 1.0);
 furn('valetPodium', 4.6, 9.5, 0, { w: 0.6, d: 0.5 });
@@ -706,7 +751,7 @@ export const APPROACH = {
   stove0: [-24.1, -9.6], stove1: [-23.1, -9.6], stove2: [-22.1, -9.6], stove3: [-21.1, -9.6],
   stove4: [-22.9, -7.75], stove5: [-21.9, -7.75], stove6: [-20.9, -7.75], stove7: [-19.9, -7.75],
   toaster: [-15.0, -9.6], bread: [-16.0, -9.6], juicer: [-13.8, -9.6], coffee: [-12.2, -9.6],
-  towels: [-21.8, -15.0], towels2: [-2.9, -19.4], breaker: [-29.0, -25.5], batteries: [-22.25, -27.7],
+  towels: [-21.8, -15.0], towels2: [-2.9, -19.4], breaker: [0, -30.5], batteries: [-22.25, -27.7],
 };
 
 // ---------- navigation: outside & lobby ----------
@@ -721,6 +766,18 @@ node('street_w', -36, 9.3);
 node('street_e', 36, 9.3);
 chain(['street_w', 'walk_w', 'curb_w', 'curb_c', 'curb_e', 'walk_e', 'street_e']);
 link('maze_path', 'street_w');
+// round either side of the building to the breaker box at the back
+node('out_e1', 33, 2);
+node('out_e2', 33, -14);
+node('out_e3', 33, -31);
+node('out_n1', 16, -31.4);
+node('out_w1', -35.4, 0);
+node('out_w2', -34.4, -14);
+node('out_w3', -33, -31);
+node('out_n2', -16, -31.4);
+node('breaker_out', 0, -30.6);
+chain(['street_e', 'out_e1', 'out_e2', 'out_e3', 'out_n1', 'breaker_out']);
+chain(['street_w', 'out_w1', 'out_w2', 'out_w3', 'out_n2', 'breaker_out']);
 link('door_out', 'curb_c');
 link('door_in', 'door_out');
 
@@ -782,8 +839,10 @@ chain(['h-22.5', 'laun_in', 'laun_c', 'laun_k', 'kit_l']);
 node('util_in', -22.5, -23.4);
 node('util_c', -26.0, -24.6);
 chain(['h-22.5', 'util_in', 'util_c']);
+node('cctv_seat', -26.2, -27.2, { ry: 0 });
+link('util_c', 'cctv_seat');
 
-// staff room & storage
+// break room & storage
 node('staff_in', 24, -16.6);
 node('staff_e', 27.6, -16.0);
 node('staff_p', 25.8, -12.1);
@@ -999,6 +1058,66 @@ const hallNodeNear = (x, f) => {
   }
 }
 
+// ---------- the basement ----------
+// Down the steps from the door in Storage: a long cellar hall with the boiler room off it to the north,
+// a room of lost luggage to the south and, at the far west end, an iron door in chains. NPCs cross the
+// threshold like an elevator ride (see Sim.ride()); the way through only exists while the door is open.
+{
+  const o = BASEMENT_F * FLOOR_DX, X = x => x + o, S = BSM_STEPS;
+  hWall(-29, X(16), X(26));
+  hWall(-24, X(6), X(16));
+  hWall(-24, X(26), X(30));
+  hWall(-16, X(6), X(12));
+  hWall(-16, X(24), X(30));
+  hWall(-11, X(12), X(24));
+  vWall(X(6), -24, -16);
+  vWall(X(30), -24, -16);
+  vWall(X(16), -29, -24);
+  vWall(X(26), -29, -24);
+  vWall(X(12), -16, -11);
+  vWall(X(24), -16, -11);
+  // the steps: stone walls on either side, so the only way on is from the foot
+  collider(S.x1, -23.85, S.x3, S.z1, 'all');
+  collider(S.x1 + 0.35, S.z2, S.x3, S.z2 + 0.12, 'all');
+  furn('cellarSteps', S.x1, (S.z1 + S.z2) / 2, 0, { run: S.x2 - S.x1, land: S.x3 - S.x2, rise: S.rise, span: S.z2 - S.z1 });
+  furn('furnace', X(21), -27.6, 0, { w: 3.2, d: 2.0 });
+  furn('coalPile', X(24.4), -27.9, 0, { w: 1.6, d: 1.4 });
+  furn('pipeRun', X(18), -23.6, 0, { len: 22 });
+  furn('pipeRun', X(18), -16.5, 0, { len: 22, low: true });
+  furn('trunkPile', X(22.6), -12.4, 0, { w: 2.2, d: 1.4, seed: 1 });
+  furn('trunkPile', X(19.2), -11.9, 0, { w: 2.4, d: 1.2, seed: 2 });
+  furn('trunkPile', X(13.4), -14.6, PI / 2, { w: 2.0, d: 1.2, seed: 3 });
+  furn('porterCart', X(16.2), -12.0, 0, { w: 1.3, d: 0.7 });
+  furn('ledgerDesk', X(21.8), -15.2, PI, { w: 1.3, d: 0.7 });
+  furn('ironDoor', X(6.15), -20, PI / 2, {});
+  for (const x of [9, 15, 21, 27]) furn('bulb', X(x), -20, 0, { cellar: true });
+  furn('bulb', X(21), -26.4, 0, { cellar: true });
+  furn('bulb', X(18), -13.4, 0, { cellar: true });
+  station('bsm_up', 'cellarUp', S.x3 - 0.2, 2.3, (S.z1 + S.z2) / 2, 0.7);
+  station('bsm_iron', 'ironDoor', X(6.5), 1.3, -20, 0.9);
+  station('bsm_ledger', 'ledger', X(21.8), 1.0, -14.9, 0.45);
+  station('bsm_cart', 'cart', X(16.2), 1.2, -12.0, 0.5);
+  const bn = (id, x, z, extra) => node(id, X(x), z, { staff: true, ...extra });
+  bn('bsm_top', 29.25, -22.4, { door: true, on: 'bsm_open' });
+  bn('bsm_foot', 25.6, -22.4, { stairEntry: true });
+  bn('bsm_e', 23.4, -20.2);
+  bn('bsm_c', 17.5, -20.2);
+  bn('bsm_w', 9.6, -20.2);
+  bn('bsm_iron', 7.5, -20, { ry: -PI / 2 });
+  bn('bsm_boiler', 21, -25.6);
+  bn('bsm_lug', 18, -14.2);
+  bn('bsm_cart', 16.2, -13.1, { ry: PI });
+  bn('bsm_desk', 21.8, -14.3, { ry: PI });
+  chain(['bsm_top', 'bsm_foot', 'bsm_e', 'bsm_c', 'bsm_w', 'bsm_iron']);
+  link('bsm_c', 'bsm_boiler');
+  link('bsm_e', 'bsm_boiler');
+  link('bsm_c', 'bsm_lug');
+  link('bsm_lug', 'bsm_cart');
+  link('bsm_lug', 'bsm_desk');
+  NODES.basement.door = true;
+  link('basement', 'bsm_top');
+}
+
 // ---------- queries ----------
 export function inRect(x, z, r) { return x >= r.x1 && x <= r.x2 && z >= r.z1 && z <= r.z2; }
 export function inPool(x, z) { return x > POOL.x1 && x < POOL.x2 && z > POOL.z1 && z < POOL.z2; }
@@ -1020,6 +1139,8 @@ const STEP = 0.45; // the highest step anyone takes without jumping
 // storey in the same slot. The slope runs through the middle of each tread, not along the nosings.
 export function surfaceY(x, z, y = 0) {
   if (inPool(x, z)) return POOL.floorY;
+  const B = BSM_STEPS;
+  if (x > B.x1 && x < B.x3 && z > B.z1 && z < B.z2) return Math.min(1, (x - B.x1) / (B.x2 - B.x1)) * B.rise;
   if (!inStairwell(x, z)) return 0;
   const f = floorOf(x), wx = x - f * FLOOR_DX;
   const up = Math.min(1, (STAIRS.x2 - wx) / (STAIRS.x2 - STAIRS.x1) + 0.5 / STAIRS.steps);
@@ -1124,7 +1245,7 @@ const CLIMB_COST = 1.6; // stairs are harder going than a flat hallway
 const QUEUE_COST = 3;  // the check-in line is for queuing, not for walking through
 const worldX = nd => nd.x - floorOf(nd.x) * FLOOR_DX;
 function hop(a, b) {
-  if (floorOf(a.x) !== floorOf(b.x)) return a.lift && b.lift ? LIFT_COST : 0.05;
+  if (floorOf(a.x) !== floorOf(b.x)) return a.lift && b.lift ? LIFT_COST : a.door && b.door ? 3 : 0.05;
   return Math.hypot(a.x - b.x, a.z - b.z) * (b.queue ? QUEUE_COST : a.stair && b.stair ? CLIMB_COST : 1);
 }
 const hopOk = (a, b) => !(FLAGS.elev_out && a.lift && b.lift && floorOf(a.x) !== floorOf(b.x));
@@ -1233,7 +1354,7 @@ function straighten(sx, sz, pts, opts) {
     let pick = i;
     if (!inStairwell(cx, cz)) for (let k = end; k > i; k--) if (clearWalk(cx, cz, pts[k].x, pts[k].z, opts)) { pick = k; break; }
     const p = pts[pick];
-    if ((p.x - cx) ** 2 + (p.z - cz) ** 2 > 0.0025 || pick === n - 1) out.push({ x: p.x, z: p.z, hard: hard[pick] || pick === n - 1, stair: !!p.stair });
+    if ((p.x - cx) ** 2 + (p.z - cz) ** 2 > 0.0025 || pick === n - 1) out.push({ x: p.x, z: p.z, hard: hard[pick] || pick === n - 1, stair: !!p.stair, door: !!p.door });
     cx = p.x; cz = p.z; i = pick + 1;
   }
   return out;

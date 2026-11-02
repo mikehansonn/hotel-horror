@@ -89,6 +89,12 @@ console.log('\nDifficulty');
   check(sim.settings.preset === 'normal', 'only the host can change difficulty');
   sim.handleAction(1, { a: 'settings', s: { preset: 'nightmare' } });
   check(sim.settings.preset === 'nightmare' && sim.kitchenMode() === 'advanced', 'host can change difficulty in the lobby');
+  sim.handleAction(1, { a: 'cmd', cmd: 'start' });
+  sim.handleAction(1, { a: 'settings', s: { preset: 'chill' } });
+  const during = sim.settings.preset;
+  sim.toBreak();
+  sim.handleAction(1, { a: 'settings', s: { preset: 'chill' } });
+  check(during === 'nightmare' && sim.settings.preset === 'chill', 'and between shifts in the break room, but not during one');
 }
 
 // ---------- shifts ----------
@@ -117,7 +123,7 @@ function playGame({ lazy = false, realistic = false, slow = 1, players = 1, roun
     if (!res) throw new Error(`round ${r} never ended (phase ${sim.phase}, H ${sim.hour().toFixed(2)})`);
     out.push({ title: res.title, avg: res.avg, th: res.threshold, passed: res.passed, n: res.surveys.length, money: sim.money, close: Math.round(sim.clock - sim.closingAt), ...sim.stats });
     sim.handleAction(1, { a: 'cmd', cmd: 'continue' });
-    if (sim.phase === 'gameover') { if (!retries) break; sim.handleAction(1, { a: 'cmd', cmd: 'retry' }); continue; }
+    if (sim.phase === 'gameover') { if (!retries) break; sim.handleAction(1, { a: 'cmd', cmd: 'retry' }); sim.handleAction(1, { a: 'cmd', cmd: 'start' }); continue; }
     if (sim.phase === 'victory') break;
     if (shop) for (const u of SHOPPING) for (let i = 0; i < 2; i++) sim.handleAction(1, { a: 'buy', u });
     sim.handleAction(1, { a: 'cmd', cmd: 'start' });
@@ -364,6 +370,107 @@ try {
 } catch (e) { fail('incident checks crashed: ' + e.stack); }
 
 // ---------- expansion, suites and helpers ----------
+console.log('\nThe story and the night');
+try {
+  const evs = [];
+  const sim = new Sim({ shiftLen: 480, hostId: 1, send: m => evs.push(m), sendTo: (to, m) => evs.push({ ...m, to }) });
+  sim.addPlayer(1, 'Night Clerk');
+  const pl = sim.players[1];
+  const stand = (x, z, yaw = 0) => sim.setPose(1, { x, y: 0, z, yaw });
+  const run = secs => { for (let t = 0; t < secs; t += 0.05) sim.update(0.05); };
+  check(sim.phase === 'lobby' && sim.inBreakRoom(pl), 'the crew clocks in in the break room');
+  run(0.2);
+  stand(24, -20.5);
+  run(0.2);
+  check(sim.phase === 'shift' && sim.round === 1, 'walking back out of the break room starts the shift');
+  sim.schedule = [];
+  sim.incidentT = 1e9;
+  sim.events = [];
+
+  check(L.STATIONS.breaker.z < L.BUILDING.z1 && L.findPath('street_e', 'breaker_out') && L.findPath('street_w', 'breaker_out'), 'the breaker box is outside, round the back, reachable from either side');
+
+  const { p } = settle(sim, 'couple', '104', 'r104_mid');
+  p.nextReq = 0;
+  sim.updateParty(p, 0.1);
+  sim.buildTasks();
+  check(p.calling && !p.request && sim.tasks.some(t => t.ic === '☎️'), 'a guest who wants something rings the front desk, and nothing happens until someone answers');
+  stand(L.STATIONS.phone.x, L.STATIONS.phone.z - 0.6);
+  sim.handleAction(1, { a: 'station', s: 'phone' });
+  check(p.request && !sim.calls.length, 'answering the phone turns the call into a job');
+  p.request = null;
+  p.nextReq = 0;
+  sim.updateParty(p, 0.1);
+  sim.calls[0].t = 0.01;
+  sim.callTick(0.1);
+  check(!p.calling && (p.comp.phone || 0) > 0, 'a call nobody answers is a complaint');
+
+  const boss = settle(sim, 'boss', '105', 'h9.4', 'chill');
+  sim.startDownThere();
+  check(L.FLAGS.bsm_open && sim.story.rescue?.g === boss.g.id, 'on the fourth night the basement door is found open and the CEO goes down');
+  stand(-6, -20);
+  run(40);
+  check(L.floorOf(boss.g.x) === L.BASEMENT_F && boss.g.st === 'entranced', 'he ends up at the iron door, entranced');
+  stand(boss.g.x + 1.2, boss.g.z, Math.PI / 2);
+  sim.handleAction(1, { a: 'rouse', g: boss.g.id });
+  stand(L.BASEMENT.x - 0.6, L.BASEMENT.z);
+  run(30);
+  check(sim.story.rescue.done && L.floorOf(boss.g.x) === 0, 'snapped out of it, he follows you back up the steps');
+  sim.slowTick(0.5);
+  check(!L.FLAGS.bsm_open, 'and the basement door locks again behind you');
+
+  const bag = sim.spawnMimic({ x: -6, z: -20 });
+  sim.buildTasks();
+  check(bag.disguised && sim.tasks.some(t => t.tx === 'Luggage → Room 000'), 'a mimic sits there looking like luggage for Room 000');
+  stand(-7.2, -20, -Math.PI / 2);
+  sim.updateMonsters(0.1);
+  check(!bag.disguised && bag.huntT > 0, 'step up to it and it comes for you');
+  for (let i = 0; i < 40 && !pl.out; i++) sim.updateMonsters(0.05);
+  check(pl.out && evs.some(e => e.e === 'taken' && e.to === undefined && e.p === 1), 'caught: out for the rest of the shift');
+  check(!sim.sees(pl, { x: -6, z: -20 }) && (sim.handleAction(1, { a: 'station', s: 'phone' }), true), 'a taken player can\'t see or do anything');
+  run(5);
+  check(sim.phase === 'results' && sim.results.wiped && !sim.results.passed, 'with nobody left on their feet, the shift is over');
+  sim.handleAction(1, { a: 'cmd', cmd: 'continue' });
+  sim.handleAction(1, { a: 'cmd', cmd: 'retry' });
+  check(sim.phase === 'break', 'retrying sends everyone back to the break room');
+  sim.handleAction(1, { a: 'cmd', cmd: 'start' });
+  check(sim.phase === 'shift' && sim.round === 1 && !pl.out, 'and the shift starts over with everyone back on their feet');
+  sim.schedule = [];
+  sim.incidentT = 1e9;
+  sim.events = [];
+
+  const st = sim.spawnStatic(29);
+  Object.assign(st, { x: 0, z: 2, cool: 0 });
+  stand(L.STATIONS.cctv.x, L.STATIONS.cctv.z + 0.8);
+  sim.buildTasks();
+  check(!sim.tasks.some(t => t.ic === '📺'), 'the Static isn\'t on the list until somebody sees it on a monitor');
+  sim.handleAction(1, { a: 'cctv', on: true, cams: ['lobby', 'door', 'hallw', 'halle'] });
+  sim.watchCameras();
+  sim.buildTasks();
+  check(st.onCam === 'LOBBY' && sim.tasks.some(t => t.ic === '📺'), 'sitting at the monitors shows it on the lobby camera');
+  sim.handleAction(1, { a: 'flash', cam: 'lobby' });
+  check(st.cool > 20 && Math.hypot(st.x - L.BASEMENT.x, st.z - L.BASEMENT.z) < 1, 'flashing that camera drives it back to the basement door');
+
+  sim.startAwakening();
+  const key = Object.values(sim.items).find(it => it.t === 'oldkey');
+  sim.buildTasks();
+  check(sim.story.finale.stage === 'key' && !sim.power && L.FLAGS.bsm_open && key && L.floorOf(key.x) === L.BASEMENT_F && sim.tasks.some(t => t.ic === '🗝️'), 'on the last night it wakes: the lights die, the door opens and the brass key waits on the porter\'s cart');
+  sim.setPose(1, { x: key.x, y: 0, z: key.z + 0.6 });
+  sim.handleAction(1, { a: 'pickup', id: key.id });
+  const iron = L.STATIONS.bsm_iron;
+  sim.setPose(1, { x: iron.x + 1, y: 0, z: iron.z });
+  sim.handleAction(1, { a: 'station', s: 'bsm_iron' });
+  check(sim.story.finale.stage === 'sealed' && !Object.values(sim.monsters).some(m => m.k !== 'raccoon') && sim.power, 'locking the iron door puts it back to sleep');
+  check(!sim.spawnMonster('porter', 0, 0, 10), 'and nothing else comes up tonight');
+  const doomed = new Sim({ shiftLen: 480, hostId: 1 });
+  doomed.addPlayer(1, 'Late');
+  doomed.handleAction(1, { a: 'cmd', cmd: 'start' });
+  doomed.schedule = [];
+  doomed.startAwakening();
+  doomed.clock = ((30.01 - 15) / 21) * doomed.shiftLen;
+  doomed.update(0.05);
+  check(doomed.phase === 'results' && doomed.results.doom && !doomed.results.passed, 'if the door is still open at dawn, the game is over');
+} catch (e) { fail('story checks crashed: ' + e.stack); }
+
 console.log('\nHorror');
 try {
   const evs = [];

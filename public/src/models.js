@@ -504,6 +504,92 @@ export function buildShade() {
   return root;
 }
 
+// The mimic, unfolded: an old suitcase split open into a mouth full of teeth, up on long jointed legs.
+export function buildMimic() {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const hide = '#5a4632', inner = '#5c0f16', bone = '#e8e0cc';
+  const lid = new THREE.Group();
+  lid.position.set(0, 0.95, -0.12);
+  body.add(lid);
+  rbox(body, 0.62, 0.22, 0.34, hide, 0, 0.85, 0);
+  rbox(body, 0.56, 0.06, 0.3, inner, 0, 0.97, 0);
+  rbox(lid, 0.62, 0.22, 0.34, hide, 0, 0.11, 0.12);
+  for (let i = 0; i < 7; i++) {
+    const x = -0.24 + i * 0.08;
+    const t1 = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.09, 4), mat(bone));
+    t1.position.set(x, 1.0, 0.15);
+    body.add(t1);
+    const t2 = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.09, 4), mat(bone));
+    t2.position.set(x + 0.04, 0.02, 0.27);
+    t2.rotation.x = Math.PI;
+    lid.add(t2);
+  }
+  box(lid, 0.12, 0.06, 0.02, '#e8d29a', 0.18, 0.2, 0.3); // the luggage tag: 000
+  const legs = [];
+  for (const [x, z] of [[-0.26, 0.12], [0.26, 0.12], [-0.26, -0.12], [0.26, -0.12], [0, -0.16]]) {
+    const leg = new THREE.Group();
+    leg.position.set(x, 0.8, z);
+    body.add(leg);
+    const upper = box(leg, 0.035, 0.5, 0.035, '#2a1f18', 0, -0.2, 0);
+    upper.rotation.z = x ? -Math.sign(x) * 0.5 : 0;
+    box(leg, 0.03, 0.55, 0.03, '#2a1f18', x * 0.6, -0.55, z * 0.5);
+    legs.push(leg);
+  }
+  root.userData = { mimic: { body, lid, legs } };
+  return root;
+}
+
+export function animateMimic(obj, anim, t) {
+  const m = obj.userData.mimic;
+  const moving = anim === 'walk';
+  m.lid.rotation.x = -0.5 - (moving ? Math.abs(Math.sin(t * 9)) * 0.5 : 0.2);
+  m.legs.forEach((l, i) => (l.rotation.x = moving ? Math.sin(t * 16 + i * 1.7) * 0.6 : 0));
+  m.body.position.y = moving ? Math.abs(Math.sin(t * 16)) * 0.05 : 0;
+  m.body.rotation.z = anim === 'stun' ? Math.sin(t * 30) * 0.15 : 0;
+}
+
+// The Static: a tall figure made of television snow. Only cameras see it (it lives on layer 1).
+const staticCanvas = document.createElement('canvas');
+staticCanvas.width = staticCanvas.height = 64;
+export const staticTexture = new THREE.CanvasTexture(staticCanvas);
+export function scrambleStatic() {
+  const g = staticCanvas.getContext('2d');
+  const img = g.createImageData(64, 64);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random() < 0.5 ? 20 : 230 * Math.random() + 25;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  staticTexture.needsUpdate = true;
+}
+scrambleStatic();
+export function buildStatic() {
+  const root = new THREE.Group();
+  const fuzz = new THREE.MeshBasicMaterial({ map: staticTexture, transparent: true, opacity: 0.92 });
+  const torso = new THREE.Mesh(cylGeo(0.16, 0.26, 1.5, 8), fuzz);
+  torso.position.y = 1.3;
+  root.add(torso);
+  const head = new THREE.Mesh(SPHERE, fuzz);
+  head.scale.set(0.2, 0.26, 0.2);
+  head.position.y = 2.25;
+  root.add(head);
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Mesh(cylGeo(0.04, 0.03, 1.3, 6), fuzz);
+    arm.position.set(0.24 * s, 1.35, 0);
+    arm.rotation.z = 0.08 * s;
+    root.add(arm);
+    const leg = new THREE.Mesh(cylGeo(0.06, 0.04, 0.7, 6), fuzz);
+    leg.position.set(0.1 * s, 0.35, 0);
+    root.add(leg);
+  }
+  root.traverse(o => o.layers.set(1));
+  root.userData = { static: true };
+  return root;
+}
+
 // A raccoon: grey and round, with a bandit's mask and a ringed tail.
 export function buildRaccoon() {
   const root = new THREE.Group();
@@ -594,6 +680,17 @@ export function buildItem(type, opts = {}) {
     case 'towels':
       ['#ffffff', '#a8dadc', '#ffffff'].forEach((c, i) => box(g, 0.36, 0.075, 0.24, c, 0, 0.04 + i * 0.075, 0));
       break;
+    case 'oldkey': { // Mr. Harrow's father's brass key, as long as your hand
+      const brass = glow('#b08d3c', 0.25);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 14), brass);
+      ring.position.set(-0.11, 0.03, 0);
+      ring.rotation.x = Math.PI / 2;
+      g.add(ring);
+      box(g, 0.2, 0.018, 0.018, brass, 0.02, 0.03, 0);
+      box(g, 0.025, 0.018, 0.05, brass, 0.1, 0.03, 0.025);
+      box(g, 0.02, 0.018, 0.035, brass, 0.07, 0.03, 0.017);
+      break;
+    }
     case 'egg_raw':
       box(g, 0.3, 0.07, 0.13, '#cdb891', 0, 0.035, 0);
       for (let i = 0; i < 6; i++) ball(g, 0.035, '#f8f4ea', -0.1 + (i % 3) * 0.1, 0.09, (i < 3 ? -1 : 1) * 0.03, 1, 1.25, 1);

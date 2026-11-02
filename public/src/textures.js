@@ -184,6 +184,25 @@ export function makeSurfaces() {
   }, 8, 23);
   T.wallStaff = paint(256, c => { c.fillStyle = '#9fb3c2'; c.fillRect(0, 0, 256, 256); c.fillStyle = '#56697a'; c.fillRect(0, 160, 256, 8); c.fillRect(0, 246, 256, 10); }, 10, 24);
   T.carpet = hexCarpet();
+  // the basement: damp stone blocks, and flagstones underfoot
+  T.wallStone = paint(256, (c, s, r) => {
+    c.fillStyle = '#4a4640'; c.fillRect(0, 0, s, s);
+    for (let y = 0; y < s; y += 42) for (let x = ((y / 42) % 2) * 32 - 32; x < s; x += 64) {
+      const v = 58 + r() * 26;
+      c.fillStyle = `rgb(${v},${v - 3},${v - 8})`; c.fillRect(x + 2, y + 2, 60, 38);
+    }
+    c.fillStyle = 'rgba(20,40,30,0.25)';
+    for (let i = 0; i < 6; i++) c.fillRect(r() * s, s * 0.55, 6 + r() * 10, s * 0.45);
+  }, 18, 31);
+  T.stone = paint(256, (c, s, r) => {
+    c.fillStyle = '#2e2c29'; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const v = 52 + r() * 22;
+      c.fillStyle = `rgb(${v},${v - 2},${v - 6})`; c.fillRect(i * 64 + 2 + r() * 3, j * 64 + 2 + r() * 3, 58, 58);
+    }
+    c.fillStyle = 'rgba(80,110,130,0.18)';
+    for (let i = 0; i < 3; i++) { c.beginPath(); c.ellipse(r() * s, r() * s, 20 + r() * 30, 8 + r() * 14, r() * 3, 0, 7); c.fill(); }
+  }, 16, 32);
   T.snow = paint(512, (c, s, r) => {
     c.fillStyle = '#e8eef4'; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 60; i++) { c.fillStyle = `rgba(150,170,195,${r() * 0.12})`; c.beginPath(); c.ellipse(r() * s, r() * s, 20 + r() * 70, 8 + r() * 30, r() * 3, 0, 7); c.fill(); }

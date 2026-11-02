@@ -85,7 +85,7 @@ export function crewSummary(settings, np) {
   const c = crewFactors(settings.scaling, np);
   const parts = [`×${c.count.toFixed(2)} guests`];
   if (c.patience !== 1) parts.push(c.patience > 1 ? `guests ${Math.round((c.patience - 1) * 100)}% more patient` : `guests ${Math.round((1 - c.patience) * 100)}% less patient`);
-  if (c.chores !== 1) parts.push(`${c.chores > 1 ? '+' : ''}${Math.round((c.chores - 1) * 100)}% messes`);
+  if (c.chores !== 1) parts.push(`${c.chores > 1 ? '+' : ''}${Math.round((c.chores - 1) * 100)}% messes & calls`);
   if (c.horror !== 1) parts.push(`${c.horror > 1 ? '+' : ''}${Math.round((c.horror - 1) * 100)}% horror`);
   if (c.target) parts.push(`+${c.target.toFixed(2)}★ target`);
   return `With ${np} staff: ${parts.join(' · ')}`;

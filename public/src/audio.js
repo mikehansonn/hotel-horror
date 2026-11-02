@@ -126,6 +126,14 @@ export class Sfx {
         for (let i = 0; i < 6; i++) this.hiss(o, { t: i * 0.22, dur: 0.2, vol: 0.06, type: 'bandpass', f: 2500 + Math.random() * 1500, q: 4, a: 0.05 });
         break;
       case 'creak': this.tone(o, { f: 110, f2: 70, type: 'sawtooth', dur: 0.9, vol: 0.06, a: 0.2 }); break;
+      case 'static': // television snow, somewhere close: the Static
+        for (let i = 0; i < 5; i++) this.hiss(o, { t: Math.random() * 0.6, dur: 0.05 + Math.random() * 0.12, vol: 0.09, type: 'highpass', f: 2500 + Math.random() * 3000 });
+        this.hiss(o, { dur: 0.7, vol: 0.05, type: 'bandpass', f: 1800, q: 0.7 });
+        break;
+      case 'quake': // something enormous turning over, far below
+        this.tone(o, { f: 38, f2: 26, type: 'sawtooth', dur: 3.2, vol: 0.22, a: 0.6 });
+        this.hiss(o, { dur: 2.8, vol: 0.25, f: 180, f2: 60, a: 0.5 });
+        break;
       case 'stalk': // slow, heavy footsteps somewhere nearby
         for (let i = 0; i < 2; i++) { this.hiss(o, { t: i * 0.42, dur: 0.1, vol: 0.16, f: 140 }); this.tone(o, { f: 55, f2: 38, t: i * 0.42, dur: 0.12, vol: 0.12 }); }
         break;

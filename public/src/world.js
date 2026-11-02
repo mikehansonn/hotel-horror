@@ -11,12 +11,12 @@ import { box, mat, buildItem, buildPanFood, compactGroup } from './models.js';
 import { DISHES } from './content.js';
 import { clamp, lerp, mulberry32 } from './util.js';
 
-const WALL_STYLE = { lobby: 'wallLobby', hall: 'wallHall', room: 'wallRoom', bath: 'wallTile', dining: 'wallDining', tile: 'wallTile', plain: 'wallPlain', concrete: 'wallConcrete', pool: 'wallPool', staff: 'wallStaff', lodge: 'lodge', siding: 'siding', lounge: 'wallLounge' };
+const WALL_STYLE = { lobby: 'wallLobby', hall: 'wallHall', room: 'wallRoom', bath: 'wallTile', dining: 'wallDining', tile: 'wallTile', plain: 'wallPlain', concrete: 'wallConcrete', pool: 'wallPool', staff: 'wallStaff', lodge: 'lodge', siding: 'siding', lounge: 'wallLounge', stone: 'wallStone' };
 const SHINY = new Set(['marble', 'wood', 'checker', 'tile', 'pooltile']);
 const TIER_CODE = { b: 'basic', s: 'suite', p: 'pres' };
 const ROOF_RISE = 3.4; // height of the pitched roof over the room tower
-const INTERIOR = 7.5;  // brightness of the ceiling lights
-const LAMP_GLOW = 1.15; // how hard lamp shades glow (they feed the bloom)
+const INTERIOR = 6.0;  // brightness of the ceiling lights (an old hotel, never quite bright enough)
+const LAMP_GLOW = 0.95; // how hard lamp shades glow (they feed the bloom)
 const PASS_X = [-20.05, -19.6, -19.15, -18.7]; // where plates sit on the pass
 
 // Plain single-color props all share one vertex-colored material once merged, so a hundred
@@ -131,7 +131,7 @@ const stairHoles = f => [{ x1: L.STAIRS.x1 + f * L.FLOOR_DX, x2: L.STAIRS.x2 + f
 const overlaps = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.z1 < b.z2 && a.z2 > b.z1;
 
 const condKey = o => [o.on && `on:${o.on}`, o.off && `off:${o.off}`, o.gate && `gate:${o.gate}`].filter(Boolean).join('|');
-const floorOffset = (obj, f) => obj.position.set(-f * L.FLOOR_DX, f * L.FLOOR_H, 0);
+const floorOffset = (obj, f) => obj.position.set(-f * L.FLOOR_DX, L.levelY(f), 0);
 
 export function buildWorld(scene) {
   const T = makeSurfaces();
@@ -177,7 +177,7 @@ export function buildWorld(scene) {
   };
 
   // ---------- floors ----------
-  const FLOOR_SCALE = { marble: 2.4, wood: 3, checker: 1.6, tile: 1.2, concrete: 4, carpet: 2.6, pooltile: 1.5 };
+  const FLOOR_SCALE = { marble: 2.4, wood: 3, checker: 1.6, tile: 1.2, concrete: 4, carpet: 2.6, pooltile: 1.5, stone: 2.5 };
   for (const z of L.ZONES) {
     if (z.id === 'pool') continue;
     const parent = parentFor((z.x1 + z.x2) / 2, { gate: z.wing });
@@ -323,7 +323,7 @@ export function buildWorld(scene) {
 
   // ceiling light panels
   for (const z of L.ZONES) {
-    if (z.id === 'lobby' || z.id === 'dining' || z.id === 'lounge') continue;
+    if (z.id === 'lobby' || z.id === 'dining' || z.id === 'lounge' || z.id === 'basement') continue; // the basement makes do with bare bulbs
     const lamp = lampFor(z.wing), parent = parentFor((z.x1 + z.x2) / 2, { gate: z.wing });
     const holes = stairHoles(L.floorOf(z.x1 + 1));
     for (let x = z.x1 + 3; x < z.x2 - 1; x += 6) for (let zz = z.z1 + 2; zz < z.z2 - 1; zz += 6) {
@@ -497,6 +497,9 @@ export function buildWorld(scene) {
     l.position.set(x, f * L.FLOOR_H + 2.3, -20);
     return { l, wing, added: false };
   });
+  const furnaceLight = new THREE.PointLight('#ff7a2a', 7, 11, 1.4);
+  furnaceLight.position.set(21, L.BASEMENT_Y + 1.1, -26.2);
+  scene.add(furnaceLight);
   const exterior = [[0, 3.5, 12.5], [0, 6.5, 27]].map(([x, y, z]) => {
     const l = new THREE.PointLight('#ffe7b8', 30, 34, 1.3);
     l.position.set(x, y, z);
@@ -528,7 +531,7 @@ export function buildWorld(scene) {
   scene.background = new THREE.Color('#b7c6d4');
 
   const kitchen = buildKitchenDyn(scene);
-  const ws = new WorldState({ scene, doors, slides, dyn, water, waterMat, hemi, sun, interior, wingLights, exterior, stars, moon, flagGroups, wingMats, lotMarks, mountains, snow, towerTops, floorDyn, kitchen });
+  const ws = new WorldState({ scene, doors, slides, dyn, water, waterMat, hemi, sun, interior, wingLights, exterior, stars, moon, flagGroups, wingMats, lotMarks, mountains, snow, towerTops, floorDyn, kitchen, furnaceLight });
   ws.updateDecor(null);
   return ws;
 }
@@ -779,8 +782,11 @@ class WorldState {
     this.scene.background.copy(sm.sky);
     if (!power) this.scene.background.multiplyScalar(0.8);
     this.scene.fog.color.copy(sm.fog);
-    this.scene.fog.near = lerp(10, 18, sm.k);
-    this.scene.fog.far = lerp(110, 150, sm.k) - hz * 25;
+    // Down in the basement there's no sky at all: close, black fog and only the bulbs and your torch.
+    const cellar = !!cam && cam.y < L.BASEMENT_Y + 3.4;
+    if (cellar) { this.scene.background.setRGB(0.01, 0.01, 0.012); this.scene.fog.color.setRGB(0.012, 0.011, 0.01); }
+    this.scene.fog.near = cellar ? 1.5 : lerp(10, 18, sm.k);
+    this.scene.fog.far = cellar ? 17 : lerp(110, 150, sm.k) - hz * 25;
     this.stars.material.opacity = (1 - sm.k) * 0.7 * (1 - Math.min(0.8, hz * 0.6));
     this.moon.visible = sm.k < 0.5;
     // Indoors, daylight and the snow-bright sky only come in through the windows. Nothing casts
@@ -789,9 +795,9 @@ class WorldState {
       const inside = indoors(cam.x, cam.y, cam.z, top * L.FLOOR_H + L.WALL_H + ROOF_RISE) ? 1 : 0;
       this.inside += (inside - this.inside) * Math.min(1, dt * 2.5);
     }
-    this.sun.intensity = (0.12 + sm.k * 1.25) * lerp(1, 0.3, this.inside);
+    this.sun.intensity = cellar ? 0 : (0.12 + sm.k * 1.25) * lerp(1, 0.3, this.inside);
     this.sun.color.set(sm.k > 0.5 ? '#fff1e0' : '#8fa6ff');
-    this.hemi.intensity = ((power ? 0.38 : 0.14) + sm.k * 0.75) * lerp(1, 0.5, this.inside);
+    this.hemi.intensity = cellar ? 0.05 : ((power ? 0.32 : 0.1) + sm.k * 0.75) * lerp(1, 0.42, this.inside);
     this.mountains.material.color.setScalar(0.1 + sm.k * 0.9);
 
     // Flicker strobes the lights; with "reduce flashing" on it just dims them smoothly.
@@ -799,10 +805,10 @@ class WorldState {
     if (this.flickerT > 0) {
       this.flickerT -= dt;
       flick = this.calm ? 0.35 + Math.sin(t * 2) * 0.1 : Math.random() < 0.45 ? 0.05 : 0.6 + Math.random() * 0.5;
-    } else if (!this.calm && hz > 0.4 && Math.sin(t * 7.3) * Math.sin(t * 2.1) > 0.985) flick = 0.3;
+    } else if (!this.calm && hz > 0.15 && Math.sin(t * 7.3) * Math.sin(t * 2.1) > 0.96 - hz * 0.02) flick = 0.3;
     // After midnight the hotel turns its lights down until dawn.
     const late = clamp((H - 24) / 2, 0, 1) * (1 - clamp((H - 30) / 1.5, 0, 1));
-    const inten = (power ? flick : 0) * (1 - 0.3 * late);
+    const inten = (power ? flick : 0) * (1 - 0.45 * late);
     for (const l of this.interior) l.intensity = INTERIOR * inten;
     for (const w of this.wingLights) {
       const built = !!L.FLAGS[w.wing];
@@ -828,6 +834,11 @@ class WorldState {
       else { m.emissiveIntensity = open ? LIGHTS.facade.emissiveIntensity : 0.02; m.color.copy(open ? LIGHTS.facade.color : C('#2a2f36')); }
     }
     LIGHTS.window.emissiveIntensity = 0.12 + sm.k * 0.9;
+    LIGHTS.view.color.setRGB(0.5 + sm.k * 0.5, 0.56 + sm.k * 0.44, 0.72 + sm.k * 0.28);
+    LIGHTS.ring.emissiveIntensity = snap?.phn && Math.sin(t * 9) > 0 ? 2.2 : 0;
+    LIGHTS.monitor.map.offset.set(Math.random(), Math.random());
+    LIGHTS.cellar.emissiveIntensity = Math.random() < 0.04 ? 0.1 : 0.75 + Math.sin(t * 13) * 0.08;
+    this.furnaceLight.intensity = 6 + Math.sin(t * 5.1) * 1.2 + Math.sin(t * 13.7) * 0.6;
     LIGHTS.window.color.set(sm.k > 0.5 ? '#dfeaf5' : '#1b2b4a');
     LIGHTS.neon.emissiveIntensity = power ? 2 : 0;
     // The portraits' eyes only light up on bad nights.
